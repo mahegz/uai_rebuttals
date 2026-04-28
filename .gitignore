@@ -1,0 +1,12 @@
+.agents
+.claude/
+.workspace/reproduction/
+code/data/
+*.zip
+__pycache__/
+*.py[cod]
+*.egg-info/
+.DS_Store
+
+# Keep compact experiment summaries and reports trackable by force-adding them
+# when needed; raw rerun data can be large and should stay local unless requested.

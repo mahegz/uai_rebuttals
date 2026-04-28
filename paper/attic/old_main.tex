@@ -1,0 +1,1430 @@
+\documentclass{uai2026} % for initial submission
+%\documentclass[accepted]{uai2026} % after acceptance
+
+%% Choose your variant of English; be consistent
+\usepackage[american]{babel}
+
+%% Bibliography / citations
+\usepackage{natbib}
+\bibliographystyle{plainnat}
+\renewcommand{\bibsection}{
+\subsubsection*{References}}
+
+%% Math / tables / figures
+\usepackage{mathtools}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{environ}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\emergencystretch=1em
+\hfuzz=1pt
+
+%% Todo notes
+\setlength{\marginparwidth}{2cm}
+\usepackage[colorinlistoftodos,prependcaption,textsize=tiny]{todonotes}
+\presetkeys{todonotes}{inline}{}
+%% Theorem environments
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem*{remark}{Remark}
+\newtheorem{lemma}{Lemma}
+
+%% Proofs moved to an appendix for readability
+\newcommand{\appendixproofs}{}
+\NewEnviron{appendixproof}[1]{%
+  \begingroup
+  \xdef\appendixproofs{%
+    \expandafter\unexpanded\expandafter{\appendixproofs}%
+    \unexpanded{
+      \begin{proof}[}%
+        \unexpanded{#1}%
+      \unexpanded{]}%
+      \expandafter\unexpanded\expandafter{\BODY}%
+      \unexpanded{
+    \end{proof}\par\medskip}%
+  }%
+  \endgroup
+}
+
+%% Self-defined macros
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\R}{\mathbb{R}}
+
+\newcommand{\nset}{\mathbb{N}}
+\newcommand{\rset}{\mathbb{R}}
+\newcommand{\1}{\mathbf{1}}
+\newcommand{\ind}[1]{\mathbf{1}\{#1\}}
+\newcommand{\prob}{\mathbb{P}}
+\newcommand{\expec}{\mathbb{E}}
+\newcommand{\cprob}[2]{\prob\left(#1 \mid #2\right)}
+\newcommand{\cexpec}[2]{\expec\left[#1 \mid #2\right]}
+\newcommand{\test}{\mathrm{test}}
+% Instance, label, and score spaces
+\newcommand{\xcal}{\mathcal{X}}
+\newcommand{\ycal}{\mathcal{Y}}
+\newcommand{\scal}{\mathcal{S}}
+\newcommand{\scalt}{\mathcal{S}_{t}}
+% Definitions and bracketing
+\newcommand{\eqdef}{\coloneqq}
+\newcommand{\ens}[1]{\left\{#1\right\}}
+\newcommand{\open}[1]{\left(#1\right)}
+\newcommand{\closed}[1]{\left[#1\right]}
+\newcommand{\modu}[1]{\left|#1\right|}
+
+% Filtrations and masks
+\newcommand{\F}{\mathcal{F}}
+\newcommand{\G}{\mathcal{G}}
+\newcommand{\fcal}{\mathcal{F}}
+\newcommand{\gcal}{\mathcal{G}}
+\newcommand{\mcal}{\mathcal{M}}
+\newcommand{\cali}{\mathrm{cal}}
+% Conditional on $\fcal_{t}$
+\newcommand{\probt}[1]{\prob\left(#1 \mid \fcal_{t}\right)}
+\newcommand{\expect}[1]{\expec\left[#1 \mid \fcal_{t}\right]}
+
+% Draft comments toggle
+\newcommand{\mhegz}[1]{\todo[linecolor=blue,backgroundcolor=blue!10,bordercolor=blue,inline]{MH: #1}}
+
+% Citation placeholder
+\newcommand{\citeneeded}[1][]{{\color{red}\textbf{[#1]}}}
+
+% Wealth/capital (Section 5 baseline)
+\newcommand{\K}{K}
+\newcommand{\Bnd}{B}
+
+\title{Anyhow Conformal Prediction}
+
+% Filled for convenience; removed automatically for anonymous submission.
+\author[1]{Anonymous Authors}
+\affil[1]{Anonymous Affiliation}
+
+\begin{document}
+\maketitle
+%\listoftodos % Uncomment to see all todos at once
+
+\begin{abstract}
+  To be written
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction}
+
+Conformal prediction provides distribution-free prediction sets with finite-sample coverage guarantees \citep{vovk2005algorithmic}.
+Given a predictor $f:\xcal\rightarrow\ycal$, a calibration dataset $\scal_{\mathrm{cal}}=\ens{(X_1,Y_1),\ldots,(X_n,Y_n)}\subseteq\xcal\times\ycal$ and a test point $X$, the classical framework constructs a set-valued map $C_\alpha:\xcal \to 2^{\ycal}$ satisfying
+\begin{equation}
+  \label{eq:basic_conformal}
+  \prob\ens{Y\not\in C_\alpha(X)}\le \alpha,
+\end{equation}
+for the unobserved test label $Y$, whenever $(X,Y)$ is exchangeable $\scal_\cali$ and $\alpha\in(0,1)$.
+
+\mhegz{Good till here}
+
+In practice, data may arrive in a batch-sequential manner. For example, consider a factory where parts are continuously produced and inspected in batches at every time step $t\in \ens{1, \ldots, T}$. Each new batch provides a small labeled calibration set $\scal_\cali^t$, alongside one or more unlabeled test features $X_t$ whose unobserved labels $Y_t$ we wish to cover with confidence sets $C_t(X_t)$.
+
+In such settings, information obtained from earlier batches may be used to tweak the production parameters for the current batch.
+As such, the data generated across batches may be arbitrarily dependent.
+Nontheless, the production environment typically remains stable during the processing of an individual batch. As such, we assume that, conditional on past batches, the test points $(X_t, Y_t)$ and the calibration examples in $\scal_\cali^t$ are exchangeable.
+\mhegz{reinforce the above paragraph with some }
+
+Beyond marginal coverage at each time step, practitioners require sequential guarantees that match their monitoring protocols.
+A quality regulator might audit a rolling window of recent predictions.
+An operations team might track errors made since the last equipment recalibration.
+An analyst might evaluate coverage during a specific production shift.
+These monitoring patterns specify which time steps are subject to the validity guarantee.
+Such requirements are weaker than demanding uniform coverage over all time steps.
+
+One way to enforce uniform-in-time validity is to import tools from sequential testing.
+\citet{gauthier2025values} propose conformal e-values and apply Ville's inequality \citep{ville1939etude} to obtain batch anytime-valid conformal prediction: with unknown horizons and under broad forms of distribution shift, the probability of ever making a monitored error can be controlled at level $\alpha$.
+This framework is powerful, and conformal e-prediction is genuinely useful in settings where data-dependent guarantees are essential or ground truth is delayed or ambiguous.
+
+This paper argues that the wealth-process viewpoint is structurally mismatched to the batch monitoring setting above.
+Under within-batch exchangeability, the conformal $p$-values computed in successive batches are mutually independent, not merely conditionally uncorrelated; the wealth framework discards this structure and replaces it with a generic supermartingale inequality.
+As a consequence, wealth-based guarantees are not restart-valid after a coverage failure, they enforce an unnecessarily strong anytime guarantee when only masked window guarantees are needed, they require arbitrary associations across time when each batch contains multiple test points, and they may introduce artificial dependence by first transforming independent $p$-values into e-values and then multiplying them.
+
+The alternative we develop treats sequential batch conformal prediction as resource allocation.
+After a log transformation, mask-validity becomes a collection of linear constraints on a nonnegative log-error budget, and the design of thresholds becomes convex optimization.
+Our contributions are threefold.
+First, we prove the independence of sequential batch conformal $p$-values and develop restart-validity and mask families as the right structural notions for monitoring (Section~\ref{sec:beyond}).
+Second, for finite horizons we formulate optimal open-loop design as a convex program and treat closed-loop policies as sequential replanning with pathwise regret bounds controlled by forecast errors (Section~\ref{sec:finite}).
+Third, for the infinite-horizon anytime setting we characterize the rate at which prediction sets must grow and quantify the conservativeness incurred by Ville-style guarantees, leading to tighter alternatives (Sections~\ref{sec:infinite} and~\ref{sec:ville}).
+
+Section~\ref{sec:setup} introduces the sequential batch model, mask-validity, and the wealth baseline.
+Section~\ref{sec:beyond} develops the structural arguments that motivate our optimization approach.
+Section~\ref{sec:finite} develops finite-horizon open-loop design and closed-loop replanning.
+Sections~\ref{sec:infinite}--\ref{sec:ville} study the infinite-horizon frontier and the cost of Ville-style anytime guarantees.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                SECTION BREAK
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Setup and background}
+\label{sec:setup}
+
+This section formalizes sequential batch conformal prediction, introduces masked monitoring and the resulting design problem, and reviews anytime monitoring via e-values and wealth processes.
+% The structural fact underlying the paper is that, under within-batch exchangeability, the conformal $p$-values across batches are mutually independent even when the score function at time $t$ is trained on all past data.
+
+\subsection{Sequential batch conformal prediction}
+\label{sec:batch}
+
+Fix a horizon $T\in\N$ and consider batches indexed by $t\in\{1,\dots,T\}$.
+At time $t$, a batch of total size $n_t\ge 2$ arrives; we allow $n_t$ to vary with $t$ but treat $(n_t)_{t=1}^{T}$ as fixed at deployment.
+We write $m_t:=n_t-1$ for the number of labeled calibration points used at time $t$.
+The batch contains $m_t$ labeled calibration examples $(X_{t,1},Y_{t,1}),\ldots,(X_{t,m_t},Y_{t,m_t})$ and a test feature $X_{t,n_t}$ whose label $Y_{t,n_t}$ is to be covered by a prediction set.
+For simplicity we present one test point per batch; Section~\ref{sec:dependence} returns to multiple test points.
+
+Let $(\F_t)_{t\ge 0}$ be the filtration generated by all observed batches up to time $t$, together with all internal randomness and tie-breaking variables.
+We assume that within each batch, conditional on $\F_{t-1}$, the $n_t$ examples $(X_{t,1},Y_{t,1}),\ldots,(X_{t,n_t},Y_{t,n_t})$ are exchangeable.
+This permits arbitrary dependence across batches because the conditional law at time $t$ may depend on $\F_{t-1}$.
+
+At time $t$, the conformal procedure uses a score function $s_t:\xcal\times\ycal\to\R$ that is $\F_{t-1}$-measurable.
+Define calibration scores $S_{t,i}:=s_t(X_{t,i},Y_{t,i})$ for $i\in\{1,\dots,m_t\}$ and, for a candidate label $y$, the test score $S_t^{\mathrm{test}}(y):=s_t(X_{t,n_t},y)$.
+We attach i.i.d.\ continuous tie-breaking noise $(U_{t,i})_{i=1}^{n_t}$, independent across $t$ and independent of the current batch conditional on $\F_{t-1}$, and form perturbed scores $\tilde{S}_{t,i}:=(S_{t,i},U_{t,i})$ and $\tilde{S}_t^{\mathrm{test}}(y):=(S_t^{\mathrm{test}}(y),U_{t,n_t})$, compared lexicographically.
+The split conformal $p$-value for label $y$ is
+\begin{equation}
+  \label{eq:pt-def}
+  p_t(y):=\frac{1+\sum_{i=1}^{m_t}\ind{\tilde{S}_{t,i}>\tilde{S}_t^{\mathrm{test}}(y)}}{n_t},
+\end{equation}
+and we write $p_t:=p_t(Y_{t,n_t})$ for the realized $p$-value.
+
+\begin{proposition}[Independence of sequential batch conformal $p$-values]
+  \label{prop:iid-pvalues}
+  Under within-batch exchangeability, the conformal $p$-values $(p_1,p_2,\ldots)$ are mutually independent.
+  Moreover, for each $t\ge 1$, the random variable $p_t$ is uniform on $\{1/n_t,2/n_t,\ldots,1\}$ and independent of $\F_{t-1}$.
+\end{proposition}
+
+\begin{appendixproof}{Proof of Proposition~\ref{prop:iid-pvalues}}
+  Fix $t$ and condition on $\F_{t-1}$.
+  By within-batch exchangeability and the continuous tie-breaks, the rank of $\tilde{S}_t^{\mathrm{test}}(Y_{t,n_t})$ among the $n_t$ perturbed scores is uniform on $\{1,\dots,n_t\}$, hence $p_t\mid \F_{t-1}$ is uniform on $\{1/n_t,\dots,1\}$.
+  Since this conditional law is deterministic, $p_t$ is independent of $\F_{t-1}$.
+  Mutual independence follows by iterating the tower property.
+\end{appendixproof}
+
+\begin{remark}
+  Proposition~\ref{prop:iid-pvalues} holds even when the score function $s_t$ is trained adaptively on past batches (closed-loop calibration): the dependence on the past is absorbed into $\F_{t-1}$, and exchangeability within the current batch still forces the test score rank to be uniform.
+  This independence is the foundational fact the paper exploits.
+\end{remark}
+
+\subsection{Masks and Validity}
+\label{sec:masks}
+
+Fix a horizon $T\in\N$.
+A mask is a vector $M\in\{0,1\}^T$ whose support $S(M):=\{t\in\{1,\dots,T\}:M_t=1\}$ specifies the monitored times.
+We treat the realized mask as fixed before deployment but unobserved online, and we require a uniform guarantee over a prescribed family $\mcal_0\subseteq\{0,1\}^T$.
+
+A threshold policy selects $\tau_t\in[0,1)$ and outputs prediction sets
+\begin{equation*}
+  C_t(X_{t,n_t}):=\{y\in\ycal:\ p_t(y)>\tau_t\}.
+\end{equation*}
+The miscoverage indicator is $\mathrm{err}_t:=\ind{p_t\le\tau_t}$.
+We restrict to grid thresholds $\tau_t\in\{0,1/n_t,\dots,(n_t-1)/n_t\}$, so $\prob(\mathrm{err}_t=1)=\tau_t$ under Proposition~\ref{prop:iid-pvalues}.
+
+For a mask $M$, define the masked failure event
+\begin{equation*}
+  F_T(M):=\left\{\exists t\in S(M):\ p_t\le\tau_t\right\}.
+\end{equation*}
+A policy is \emph{mask-valid at level $\alpha$} over $\mcal_0$ if $\sup_{M\in\mcal_0}\prob(F_T(M))\le\alpha$.
+
+Proposition~\ref{prop:iid-pvalues} turns mask-validity into a deterministic budget constraint.
+For any deterministic threshold sequence $(\tau_t)_{t=1}^T$ and any mask $M$,
+\begin{equation}
+  \label{eq:mask-failure-product}
+  \prob(F_T(M))=1-\prod_{t\in S(M)}(1-\tau_t).
+\end{equation}
+Introduce the log-budget variables
+\begin{equation*}
+  s_t:=-\log(1-\tau_t),\qquad L:=-\log(1-\alpha).
+\end{equation*}
+Then $\prob(F_T(M))\le\alpha$ is equivalent to $\sum_{t\in S(M)} s_t\le L$.
+Consequently, mask-validity over $\mcal_0$ is equivalent to the linear system
+\begin{equation}
+  \label{eq:mask-linear-constraints}
+  \sum_{t\in S(M)} s_t\le L\qquad\text{for all }M\in\mcal_0.
+\end{equation}
+The nonnegative quantities $s_t$ allocate a finite log-error budget $L$ across time and across the constraints induced by $\mcal_0$.
+
+To model efficiency, let $c_t(\tau_t)$ denote a cost incurred by threshold $\tau_t$ at time $t$, such as expected set size or a computational surrogate.
+In open-loop design, one chooses thresholds before deployment to minimize $\sum_{t=1}^{T} c_t(\tau_t)$ subject to the validity constraints in \eqref{eq:mask-linear-constraints}.
+In log-budget variables, this becomes a finite-dimensional resource allocation problem with linear constraints, and it is convex whenever $s\mapsto c_t(1-\exp(-s))$ is convex.
+
+Mask families capture common monitoring contracts.
+The all-ones mask corresponds to anytime monitoring.
+Sliding-window families express rolling audits of width $K$.
+Families can also encode evaluation only during prespecified periods or since the most recent retraining event.
+These guarantees are strictly weaker than anytime validity and can be substantially cheaper, because the budget constraints in \eqref{eq:mask-linear-constraints} apply only to the windows that are actually audited.
+
+\subsection{The e-value/wealth approach}
+\label{sec:wealth}
+
+Anytime-valid monitoring can be obtained by combining e-values with Ville's inequality \citep{ville1939etude}; see \citet{gauthier2025values}.
+An e-value at time $t$ is a nonnegative random variable $E_t$ satisfying $\expec[E_t\mid\F_{t-1}]\le 1$.
+Given a predictable betting fraction $\lambda_t\in[0,1]$, the associated wealth process is
+\begin{equation*}
+  W_t = W_{t-1}(1-\lambda_t+\lambda_t E_t),\qquad W_0=1.
+\end{equation*}
+The all-in product martingale corresponds to the special case $\lambda_t=1$, in which $W_t=W_{t-1}E_t$.
+The resulting process is a nonnegative supermartingale, and Ville's inequality implies
+\begin{equation*}
+  \prob\left(\sup_{t\ge 1} W_t\ge \frac{1}{\alpha}\right)\le \alpha.
+\end{equation*}
+In conformal e-prediction, $E_t$ is constructed either directly from conformity scores or by calibrating the conformal $p$-value via a p-to-e map $f_t$ with $\expec[f_t(U)]\le 1$ for a null-uniform $U$; then $E_t:=f_t(p_t)$.
+Prediction sets are obtained by inverting the corresponding e-value test over candidate labels.
+
+The update of $W_t$ requires the realized $E_t$ and hence the realized test score (and label) at each step.
+In deployments with delayed or missing labels, wealth-based procedures may therefore require additional infrastructure or assumptions beyond those needed for open-loop thresholding.
+
+\subsection{Open-loop and closed-loop policies}
+\label{sec:policies}
+
+\begin{definition}[Open-loop and closed-loop threshold policies]
+  Fix a horizon $T\in\N$.
+  An \emph{open-loop} policy fixes the entire threshold sequence $(\tau_1,\dots,\tau_T)$ at time $0$, possibly using auxiliary randomness independent of the data, and then commits to it.
+  A \emph{closed-loop} policy selects each $\tau_t$ as a measurable function of $\F_{t-1}$ (and auxiliary randomness), allowing the threshold to respond to past outcomes.
+\end{definition}
+
+Wealth-based anytime methods are inherently closed-loop: even with deterministic betting fractions $(\lambda_t)$, the wealth $W_{t-1}$ is random and adapted to $\F_{t-1}$, so the induced threshold fluctuates with past test scores.
+In contrast, Proposition~\ref{prop:iid-pvalues} implies that past test outcomes are independent of future $p$-values, so closed-loop thresholding cannot improve mask-validity in the batch kernel.
+Section~\ref{sec:finite} exploits this structure: open-loop design reduces to convex optimization over the log-budget, while closed-loop policies are treated as sequential replanning when the costs evolve over time.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Beyond Anytime Validity}
+\label{sec:beyond}
+
+Section~\ref{sec:setup} established two facts: the sequential batch conformal $p$-values are mutually independent (Proposition~\ref{prop:iid-pvalues}), and mask-validity reduces to linear log-budget constraints \eqref{eq:mask-linear-constraints}.
+We now develop three consequences that motivate a design approach over the wealth framework: the right validity notion for continual monitoring (restart-validity), the right level of guarantees (masks rather than anytime), and the right use of independence.
+
+\subsection{Restart-validity and the failure of wealth}
+\label{sec:restart}
+
+In continual monitoring, a single coverage failure does not terminate the system.
+A self-driving car that makes one incorrect prediction continues driving, and a medical alerting system that fires one false alarm continues monitoring.
+The practitioner therefore expects continued guarantees on future predictions, as if the monitoring process restarted at the failure time.
+
+Fix a horizon $T\in\N$ and a mask $M\in\{0,1\}^T$.
+For a threshold sequence $(\tau_t)_{t=1}^T$, define the successive monitored error times by $\sigma_0:=0$ and, for $j\ge 1$,
+\begin{equation}
+  \label{eq:sigma-j}
+  \sigma_j:=\inf\left\{t\in\{\sigma_{j-1}+1,\dots,T\}: M_t=1,\ p_t\le \tau_t\right\},
+\end{equation}
+with the convention $\inf\emptyset=\infty$.
+
+\begin{definition}[Restart-validity]
+  \label{def:restart-valid}
+  Fix $\alpha\in(0,1)$, a horizon $T\in\N$, and a mask $M\in\{0,1\}^T$.
+  A policy $(\tau_t)_{t=1}^T$ is restart-valid at level $\alpha$ with respect to $M$ if, for every $j\ge 0$ and every $s\in\{0,\dots,T-1\}$ with $\prob(\sigma_j=s)>0$,
+  \begin{equation*}
+    \prob(\sigma_{j+1}\le T\mid \sigma_j=s)\le \alpha.
+  \end{equation*}
+\end{definition}
+
+For a mask family $\mcal_0\subseteq\{0,1\}^T$, restart-validity should hold uniformly over masks and with restarts triggered by any monitored error in the family.
+
+\begin{definition}[Multi-mask restart-validity]
+  \label{def:multi-restart}
+  Fix $\alpha\in(0,1)$, a horizon $T\in\N$, and a mask family $\mcal_0\subseteq\{0,1\}^T$.
+  Define the union mask $M^{\cup}\in\{0,1\}^T$ by $M^{\cup}_t:=\max_{M\in\mcal_0} M_t$, and define the successive union-mask error times $(\sigma^{\cup}_j)_{j\ge 0}$ by \eqref{eq:sigma-j} with $M^{\cup}$ in place of $M$.
+  A policy $(\tau_t)_{t=1}^T$ is multi-mask restart-valid at level $\alpha$ with respect to $\mcal_0$ if, for every $j\ge 0$ and every $s\in\{0,\dots,T-1\}$ with $\prob(\sigma^{\cup}_j=s)>0$,
+  \begin{equation*}
+    \sup_{M\in\mcal_0}\prob\left(\exists t>s:\ M_t=1\ \text{and}\ p_t\le \tau_t\mid \sigma^{\cup}_j=s\right)\le \alpha.
+  \end{equation*}
+\end{definition}
+
+Ville-style wealth guarantees do not provide restart-validity.
+Ville's inequality controls a one-time boundary crossing event, $\prob(\sup_t W_t\ge 1/\alpha)\le \alpha$, and is designed for sequential testing where one stops at the first rejection.
+Conditioned on a crossing, it is silent about what happens next, so it cannot support continual monitoring without additional design choices.
+
+\begin{proposition}[Wealth-based anytime validity is not restart-valid]
+  \label{prop:wealth-not-restart}
+  There exist Ville-style wealth procedures that are anytime-valid at level $\alpha$ but are not restart-valid for the all-ones mask.
+\end{proposition}
+
+\begin{appendixproof}{Proof of Proposition~\ref{prop:wealth-not-restart}}
+  Fix $\alpha\in(0,1)$.
+  Choose an integer $n\ge \lceil 1/\alpha\rceil$ and take a horizon $T\ge 2$ large enough that $1-(1/n)^{T-1}>\alpha$.
+  Consider the all-ones mask $M_t\equiv 1$ and a simple Ville-style wealth process with all-in betting $\lambda_t\equiv 1$ and e-value increments
+  \begin{equation*}
+    E_1 := n\,\ind{p_1\le 1/n},
+    \qquad
+    E_t := 1,\quad t\ge 2.
+  \end{equation*}
+  Under Proposition~\ref{prop:iid-pvalues}, $\expec[E_1]=n\prob(p_1\le 1/n)=1$, so $(W_t)_{t\ge 0}$ with $W_t=\prod_{u=1}^{t}E_u$ is a nonnegative martingale.
+  Moreover, $\{W_1\ge 1/\alpha\}$ coincides with $\{p_1\le 1/n\}$ because $n\ge 1/\alpha$, and thus
+  \begin{equation*}
+    \prob\left(\sup_{t\ge 1} W_t \ge \frac{1}{\alpha}\right)
+    =
+    \prob(W_1\ge 1/\alpha)
+    =
+    \prob(p_1\le 1/n)
+    =
+    \frac{1}{n}
+    \le \alpha.
+  \end{equation*}
+
+  Define the associated threshold policy by $\tau_1:=1/n$ and, for $t\ge 2$,
+  \begin{equation*}
+    \tau_t :=
+    \begin{cases}
+      (n-1)/n & \text{if } W_{t-1}\ge 1/\alpha,\\
+      0 & \text{otherwise.}
+    \end{cases}
+  \end{equation*}
+  This policy is anytime-valid at level $\alpha$ since any error implies $p_1\le 1/n$ and therefore
+  $\prob(\sigma_1\le T)=\prob(p_1\le 1/n)=1/n\le \alpha$.
+
+  However, conditional on $\sigma_1=1$ the thresholds satisfy $\tau_t=(n-1)/n$ for all $t\in\{2,\dots,T\}$, so by Proposition~\ref{prop:iid-pvalues},
+  \begin{equation*}
+    \prob(\sigma_2\le T\mid \sigma_1=1)
+    =
+    1-\prod_{t=2}^{T}\left(1-\frac{n-1}{n}\right)
+    =
+    1-\left(\frac{1}{n}\right)^{T-1}
+    >
+    \alpha,
+  \end{equation*}
+  which violates restart-validity.
+\end{appendixproof}
+
+In contrast, restart-validity is free for open-loop schedules under independent batch $p$-values.
+
+\begin{proposition}[Open-loop restart-validity is automatic]
+  \label{prop:open-loop-restart}
+  Assume Proposition~\ref{prop:iid-pvalues} and fix a deterministic schedule $(\tau_t)_{t=1}^T$.
+  If the schedule is mask-valid at level $\alpha$ over a family $\mcal_0$, then it is multi-mask restart-valid at level $\alpha$ with respect to $\mcal_0$.
+\end{proposition}
+
+\begin{appendixproof}{Proof of Proposition~\ref{prop:open-loop-restart}}
+  Mask-validity is equivalent to the log-budget constraints $\sum_{t\in S(M)} s_t\le L$ for all $M\in\mcal_0$, with $s_t=-\log(1-\tau_t)\ge 0$ and $L=-\log(1-\alpha)$.
+  Every suffix sum $\sum_{t\in S(M),\,t>s} s_t$ is dominated by the full sum because each $s_t$ is nonnegative.
+  Proposition~\ref{prop:iid-pvalues} regenerates independence after any restart time, yielding the conditional guarantee in Definition~\ref{def:multi-restart}.
+\end{appendixproof}
+
+\begin{remark}[Restart-validity is free for open-loop design]
+  In log-budget variables, standard validity for a deterministic schedule requires $\sum_{t\in S(M)} s_t\le L$ for each monitored set $S(M)$.
+  Restart-validity requires the same inequality for every suffix of $S(M)$.
+  Since each $s_t\ge 0$, the suffix constraints are redundant once the full-sum constraint holds.
+  Thus, imposing restart-validity does not change the deterministic open-loop feasible set.
+\end{remark}
+
+\begin{corollary}[Geometric decay of repeated monitored errors]
+  \label{cor:geom-decay}
+  Under the conditions of Proposition~\ref{prop:open-loop-restart}, the union-mask error times satisfy $\prob(\sigma^{\cup}_k\le T)\le \alpha^k$ for all integers $k\ge 1$.
+\end{corollary}
+
+\begin{appendixproof}{Proof of Corollary~\ref{cor:geom-decay}}
+  Iterating the restart guarantee in Definition~\ref{def:multi-restart} gives $\prob(\sigma^{\cup}_k\le T)\le \alpha\,\prob(\sigma^{\cup}_{k-1}\le T)$ and hence $\prob(\sigma^{\cup}_k\le T)\le \alpha^k$.
+\end{appendixproof}
+
+Restart-validity also clarifies the role of closed-loop policies.
+Closed-loop policies may be useful for adapting to predictable changes in costs, but they cannot improve validity by reacting to past test outcomes in the independent batch kernel.
+In particular, any restart-valid closed-loop policy can be matched by an open-loop schedule with respect to the distribution of the first monitored error time and the resource usage prior to that first error.
+We state a representative result.
+
+\begin{theorem}[First-error equivalence under restart-validity]
+  \label{thm:first-error-equivalence}
+  Assume Proposition~\ref{prop:iid-pvalues} and fix a mask $M\in\{0,1\}^T$.
+  Let $(\tau_t)_{t=1}^T$ be a restart-valid closed-loop policy with respect to $M$.
+  Then there exists an open-loop randomized schedule $(\bar{\tau}_t)_{t=1}^T$, sampled at time $0$ and independent of the $p$-values, such that the first monitored error time under $(\bar{\tau}_t)$ has the same distribution as under $(\tau_t)$.
+  Moreover, for any nonnegative additive cost of the form $\sum_{t=1}^T c_t(\tau_t)\ind{\sigma_1>t-1}$, the expected pre-failure cost also matches.
+\end{theorem}
+
+\subsection{Masks versus anytime validity}
+\label{sec:masks-vs-anytime}
+
+Anytime monitoring corresponds to the all-ones mask and asks for a uniform-in-time guarantee with no fixed horizon.
+This is essential in some applications, but it is also costly.
+Under a Ville-style wealth process, the prediction set at time $t$ depends on the accumulated wealth $W_{t-1}$.
+Even under independent $p$-values and a well-calibrated model, the wealth fluctuates, and the induced thresholds must compensate for rare but inevitable downward excursions in order to maintain the uniform boundary.
+This pushes prediction sets to grow over time, a phenomenon noted empirically by \citet{gauthier2025values} and analyzed in detail in Section~6.
+
+In most deployed systems, the monitoring contract is not ``every time step forever.''
+Coverage is evaluated over reporting windows, rolling audits, or since the last intervention.
+Such requirements are naturally expressed as mask families $\mcal_0$.
+Validity over $\mcal_0$ is strictly weaker than anytime validity, and the log-budget formulation makes the distinction explicit: only the constraints induced by $\mcal_0$ consume budget.
+
+The wealth framework provides a single anytime guarantee and cannot be tuned to exploit knowledge of $\mcal_0$.
+Running separate wealth processes for different windows or masks requires splitting $\alpha$ across processes and typically recovers only conservative Bonferroni-style guarantees.
+In contrast, the budget formulation allocates log-budget directly to the relevant constraints in \eqref{eq:mask-linear-constraints}.
+
+\subsection{Independence, labels, and multiple test points}
+\label{sec:dependence}
+
+Proposition~\ref{prop:iid-pvalues} states that $p_t$ is independent of $\F_{t-1}$.
+From this perspective, using past test outcomes to set $\tau_t$ introduces dependence in the coverage decision where none is required.
+The independence of the batch $p$-values supports deterministic, exact risk evaluation \eqref{eq:mask-failure-product} and budget design \eqref{eq:mask-linear-constraints}.
+A wealth process replaces this structure with a generic supermartingale inequality and a random threshold that fluctuates with past test scores.
+Even when each $E_t$ is constructed from $p_t$ through a fixed p-to-e calibrator, the multiplicative update uses independent past $p$-values to randomize future thresholds, creating a dependent coverage process from independent inputs.
+
+Wealth processes also require label access.
+Updating $W_t$ requires the realized $E_t$ and hence the realized test score and label at time $t$.
+In many deployments, labels are delayed, expensive, or missing.
+Open-loop schedules require only calibration data and test features at prediction time.
+
+Multiple test points per batch highlight an additional mismatch.
+If each batch contains $m>1$ test features, wealth-based anytime monitoring naturally suggests running $m$ parallel wealth processes, which requires an association of test points across batches (an ordering, a matching, or an aggregation rule).
+Different conventions yield different prediction sets with no canonical choice under exchangeability.
+In the budget formulation, multiple test points add mask constraints and are handled uniformly by the same convex program.
+
+Under the independent batch kernel, sequential batch conformal prediction reduces to finite-dimensional resource allocation: choose log-budgets $(s_t)$ subject to the linear mask constraints in \eqref{eq:mask-linear-constraints}.
+The wealth framework targets a harder, distribution-free anytime objective and, in this setting, it fails to deliver restart-valid monitoring, enforces an unnecessarily strong guarantee when masks suffice, and introduces dependence and label requirements that are not structurally needed.
+Conformal e-prediction remains valuable in other contexts, including data-dependent guarantees and settings with ambiguous or delayed labels \citep{gauthier2025values}.
+For sequential batch monitoring, Section~\ref{sec:finite} develops the optimization and sequential replanning approach suggested by \eqref{eq:mask-linear-constraints}, and Sections~\ref{sec:infinite}--\ref{sec:ville} return to the genuine infinite-horizon anytime frontier.
+
+\iffalse
+This section studies the policy classes introduced in Section~\ref{sec:setup}.
+The starting point is the deterministic conditional law in Lemma~\ref{lem:grid-unif}, which implies an i.i.d.\ kernel for the conformal $p$-values.
+Under this kernel, conditioning on past prediction outcomes cannot improve future validity, so closed-loop thresholding offers no advantage for masked monitoring.
+
+\subsection{The i.i.d.\ conformal kernel}
+
+\begin{lemma}[Independence from the past; hence i.i.d.\ across time]
+  \label{lem:iid-pvalues}
+  Fix $t\ge 1$ and suppose that for every measurable set $A$ in the $p$-value state space,
+  \begin{equation*}
+    \prob(p_{t}\in A\mid \F_{t-1}) = c(A)\quad \text{a.s.},
+  \end{equation*}
+  where $c(A)\in[0,1]$ is deterministic.
+  Then $p_{t}$ is independent of $\F_{t-1}$ and has marginal distribution $\prob(p_{t}\in A)=c(A)$.
+
+  In particular, under Lemma~\ref{lem:grid-unif} we have $p_{t}\perp \F_{t-1}$ and $p_{t}$ is marginally uniform on $\{1/n,\dots,1\}$.
+  Consequently, the sequence $(p_{t})_{t\ge 1}$ is independent across time and identically distributed as $\mathrm{Unif}(\{1/n,\dots,1\})$.
+\end{lemma}
+
+\begin{appendixproof}{Proof of Lemma~\ref{lem:iid-pvalues}}
+  Fix $t\ge 1$.
+  We first prove the general fact stated in the lemma.
+  Fix a measurable set $A$ and an event $B\in\F_{t-1}$.
+  Using the tower property and that $\ind{B}$ is $\F_{t-1}$-measurable,
+  \begin{equation*}
+    \begin{aligned}
+      \prob(p_{t}\in A,\ B)
+      &=
+      \expec\bigl[\ind{B}\ind{p_{t}\in A}\bigr]\\
+      &=
+      \expec\bigl[\ind{B}\expec[\ind{p_{t}\in A}\mid \F_{t-1}]\bigr]\\
+      &=
+      \expec\bigl[\ind{B}\prob(p_{t}\in A\mid \F_{t-1})\bigr]\\
+      &=
+      \expec\bigl[\ind{B}c(A)\bigr]
+      =
+      c(A)\prob(B).
+    \end{aligned}
+  \end{equation*}
+  Taking $B=\Omega$ shows $\prob(p_{t}\in A)=c(A)$, and substituting this back yields
+  $\prob(p_{t}\in A,\ B)=\prob(p_{t}\in A)\prob(B)$ for all $B\in\F_{t-1}$, hence $p_{t}\perp \F_{t-1}$.
+
+  We now apply the general fact using Lemma~\ref{lem:grid-unif}.
+  By Lemma~\ref{lem:grid-unif}, for every subset $A\subseteq\{1/n,\dots,1\}$ we have
+  \begin{equation*}
+    \prob(p_{t}\in A\mid \F_{t-1}) = \frac{|A|}{n}\quad \text{a.s.},
+  \end{equation*}
+  where $|A|$ denotes cardinality.
+  Therefore $p_{t}\perp \F_{t-1}$ and $p_{t}$ is marginally discrete-uniform on $\{1/n,\dots,1\}$.
+
+  To show independence across time, fix $T\in\N$ and measurable sets $A_{1},\dots,A_{T}\subseteq\{1/n,\dots,1\}$.
+  Let $B_{T-1}:=\bigcap_{t=1}^{T-1}\{p_{t}\in A_{t}\}$.
+  Using the tower property, that $\ind{B_{T-1}}$ is $\F_{T-1}$-measurable, and that $\prob(p_{T}\in A_{T}\mid \F_{T-1})=c(A_{T})$ almost surely,
+  \begin{equation*}
+    \begin{aligned}
+      \prob\Bigl(B_{T-1}\cap\{p_{T}\in A_{T}\}\Bigr)
+      &=
+      \expec\bigl[\ind{B_{T-1}}c(A_{T})\bigr]\\
+      &=
+      c(A_{T})\prob(B_{T-1}).
+    \end{aligned}
+  \end{equation*}
+  Iterating this identity from $T$ down to $1$ yields
+  \begin{equation*}
+    \prob\Bigl(\bigcap_{t=1}^{T}\{p_{t}\in A_{t}\}\Bigr) = \prod_{t=1}^{T} c(A_{t}),
+  \end{equation*}
+  which is the product form for independence and identical marginals.
+\end{appendixproof}
+
+\begin{lemma}[One-step survival]
+  \label{lem:one-step-survival}
+  Assume Lemma~\ref{lem:iid-pvalues}.
+  Fix $t\ge 1$ and let $\tau_{t}$ be any $\sigma(\F_{t-1},R)$-measurable threshold taking values in $\{0,1/n,\dots,(n-1)/n\}$.
+  Then
+  \begin{equation*}
+    \prob(p_{t}>\tau_{t}\mid \F_{t-1},R)=1-\tau_{t}.
+  \end{equation*}
+\end{lemma}
+
+\begin{appendixproof}{Proof of Lemma~\ref{lem:one-step-survival}}
+  Since $R$ is independent of $(\F_{t})$ and Lemma~\ref{lem:iid-pvalues} gives $p_{t}\perp \F_{t-1}$, we have $p_{t}\perp \sigma(\F_{t-1},R)$.
+  In particular, for each $k\in\{0,\dots,n-1\}$,
+  \begin{equation*}
+    \begin{aligned}
+      \prob\Bigl(p_{t}\le \frac{k}{n}\mid \F_{t-1},R\Bigr)
+      &=
+      \prob\Bigl(p_{t}\le \frac{k}{n}\Bigr)\\
+      &=
+      \frac{k}{n},
+    \end{aligned}
+  \end{equation*}
+  where we used the discrete-uniform marginal law from Lemma~\ref{lem:iid-pvalues}.
+  Because $\tau_{t}$ takes values in $\{0,1/n,\dots,(n-1)/n\}$ and is $\sigma(\F_{t-1},R)$-measurable,
+  \begin{equation*}
+    \begin{aligned}
+      \prob(p_{t}\le \tau_{t}\mid \F_{t-1},R)
+      &=
+      \sum_{k=0}^{n-1}\ind{\tau_{t}=k/n}\frac{k}{n}\\
+      &=
+      \tau_{t}.
+    \end{aligned}
+  \end{equation*}
+  Taking complements yields $\prob(p_{t}>\tau_{t}\mid \F_{t-1},R)=1-\tau_{t}$.
+\end{appendixproof}
+
+\subsection{Why adaptation is incoherent under an i.i.d.\ kernel}
+\label{sec:incoherent}
+
+Lemma~\ref{lem:iid-pvalues} implies that the past is informationally vacuous for future validity events: for any $\F_{t-1}$-measurable event $B$ and any grid threshold $\tau$, we have $\prob(p_{t}\le\tau\mid B)=\tau$.
+Thus, adapting $\tau_{t}$ based on $\F_{t-1}$ responds to random fluctuations that are provably independent of $p_{t}$.
+In particular, if two test queries are identically distributed given the past, any policy that uses past test outcomes to set thresholds assigns different prediction sets to statistically identical queries solely due to independent noise.
+
+This issue is amplified when each time index corresponds to many simultaneous test queries (e.g., a daily lab run or a production batch).
+To implement a Ville-style wealth process one must choose conventions for ordering, aggregation, or parallel ``wealth streams,'' and different conventions can yield different prediction sets for exchangeable queries at the same time.
+Open-loop schedules avoid this ambiguity by committing to a single threshold per time index, independent of past test outcomes.
+
+\subsection{No adaptivity gain up to the first monitored error}
+\label{sec:no-adaptivity}
+
+\begin{lemma}[Product formula conditional on an ex-ante schedule]
+  \label{lem:product-given-schedule}
+  Assume Lemma~\ref{lem:iid-pvalues}.
+  Fix a finite horizon $T\in\N$ and a deterministic mask $M\in\{0,1\}^{T}$ with $S(M):=\{t\in\{1,\dots,T\}:\ M_{t}=1\}$.
+  Let $(\tau_{t})_{t=1}^{T}$ be a random schedule that is measurable with respect to $\sigma(\F_{0},R)$.
+  Define
+  \begin{equation*}
+    F_{T}(M):=\left\{\exists t\in\{1,\dots,T\}:\ M_{t}=1 \wedge p_{t}\le \tau_{t}\right\}.
+  \end{equation*}
+  Then
+  \begin{equation*}
+    \begin{aligned}
+      \prob(F_{T}(M)^{\mathsf{c}}\mid \tau_{1:T})&=\prod_{t\in S(M)}(1-\tau_{t}),\\
+      \prob(F_{T}(M))&=1-\expec\Bigl[\prod_{t\in S(M)}(1-\tau_{t})\Bigr].
+    \end{aligned}
+  \end{equation*}
+\end{lemma}
+
+\begin{appendixproof}{Proof of Lemma~\ref{lem:product-given-schedule}}
+  For $t\in\{0,1,\dots,T\}$ define the survival event up to time $t$,
+  \begin{equation*}
+    A_{t}(M):=\bigcap_{i\in S(M)\cap\{1,\dots,t\}}\{p_{i}>\tau_{i}\},
+  \end{equation*}
+  with the convention $A_{0}(M)=\Omega$.
+  Note that $F_{T}(M)^{\mathsf{c}}=A_{T}(M)$.
+
+  Fix $t\in\{1,\dots,T\}$.
+  Since $(\tau_{i})_{i\le t}$ is $\sigma(\F_{0},R)$-measurable and $A_{t-1}(M)$ depends only on $(p_{i})_{i\le t-1}$ and $(\tau_{i})_{i\le t-1}$, the event $A_{t-1}(M)$ is measurable with respect to $\sigma(\F_{t-1},R)$.
+  By Lemma~\ref{lem:one-step-survival} and the fact that $M$ is deterministic,
+  \begin{equation*}
+    \prob\bigl(A_{t}(M)\mid \F_{t-1},R\bigr)
+    =
+    \ind{A_{t-1}(M)}(1-\tau_{t})^{M_{t}}.
+  \end{equation*}
+  Taking conditional expectation given $\tau_{1:T}$ and iterating this recursion from $t=1$ to $t=T$ yields
+  \begin{equation*}
+    \prob(A_{T}(M)\mid \tau_{1:T})=\prod_{t=1}^{T}(1-\tau_{t})^{M_{t}}=\prod_{t\in S(M)}(1-\tau_{t}),
+  \end{equation*}
+  which proves the first identity.
+  Taking expectations and using $F_{T}(M)^{\mathsf{c}}=A_{T}(M)$ yields the second identity.
+\end{appendixproof}
+
+\begin{theorem}[No adaptivity gain for fixed-mask validity]
+  \label{thm:no-adaptivity}
+  Assume Lemma~\ref{lem:iid-pvalues} and fix a horizon $T\in\N$ and a deterministic mask $M\in\{0,1\}^{T}$.
+  Let $(\tau_{t})_{t=1}^{T}$ be any threshold process such that each $\tau_{t}$ is measurable with respect to $\sigma(\F_{t-1},R)$ and takes values in $\{0,1/n,\dots,(n-1)/n\}$.
+  Define the stopping time
+  \begin{equation*}
+    \sigma_{M} := \inf\left\{t\in\{1,\dots,T\}:\ M_{t}=1 \wedge p_{t}\le \tau_{t}\right\},
+  \end{equation*}
+  with $\inf\emptyset=\infty$.
+  For each $t\in\{1,\dots,T\}$, define the hazard level
+  \begin{equation*}
+    \lambda_{t}^{M}
+    :=
+    \begin{cases}
+      \expec[\tau_{t}\mid \sigma_{M}>t-1], & \text{if }\prob(\sigma_{M}>t-1)>0,\\
+      0, & \text{otherwise.}
+    \end{cases}
+  \end{equation*}
+  Then
+  \begin{equation*}
+    \begin{aligned}
+      \prob(\sigma_{M}>T)
+      &= \prod_{t=1}^{T}(1-\lambda_{t}^{M})^{M_{t}},\\
+      \prob\bigl(F_{T}(M)\bigr)
+      &= 1-\prod_{t=1}^{T}(1-\lambda_{t}^{M})^{M_{t}}.
+    \end{aligned}
+  \end{equation*}
+  Moreover, there exists an open-loop randomized schedule $(\bar{\tau}_{t})_{t=1}^{T}$ sampled at time $0$, with independent coordinates, such that each $\bar{\tau}_{t}$ takes values in $\{0,1/n,\dots,(n-1)/n\}$ and satisfies $\expec[\bar{\tau}_{t}]=\lambda_{t}^{M}$, and
+  \begin{equation*}
+    \prob\left(\exists t\in\{1,\dots,T\}:\ M_{t}=1 \wedge p_{t}\le \bar{\tau}_{t}\right)
+    =
+    \prob\bigl(F_{T}(M)\bigr).
+  \end{equation*}
+\end{theorem}
+
+\begin{appendixproof}{Proof of Theorem~\ref{thm:no-adaptivity}}
+  For each $t\in\{0,1,\dots,T\}$ define the survival event
+  \begin{equation*}
+    A_{t}:=\{\sigma_{M}>t\},
+  \end{equation*}
+  with $A_{0}=\Omega$.
+  Fix $t\in\{1,\dots,T\}$.
+  Since $\sigma_{M}$ is a stopping time with respect to $\sigma(\F_{t},R)$, the event $A_{t-1}$ is measurable with respect to $\sigma(\F_{t-1},R)$.
+  Also,
+  \begin{equation*}
+    A_{t}
+    =
+    A_{t-1}\cap\left(\{p_{t}>\tau_{t}\}\cup\{M_{t}=0\}\right).
+  \end{equation*}
+  Therefore,
+  \begin{equation*}
+    \prob(A_{t})
+    =
+    \expec\Bigl[\ind{A_{t-1}}\prob(p_{t}>\tau_{t}\mid \F_{t-1},R)^{M_{t}}\Bigr].
+  \end{equation*}
+  By Lemma~\ref{lem:one-step-survival}, $\prob(p_{t}>\tau_{t}\mid \F_{t-1},R)=1-\tau_{t}$.
+  Hence
+  \begin{equation*}
+    \prob(A_{t})
+    =
+    \expec\bigl[\ind{A_{t-1}}(1-\tau_{t})^{M_{t}}\bigr].
+  \end{equation*}
+  If $M_{t}=0$ then $\prob(A_{t})=\prob(A_{t-1})$.
+  If $M_{t}=1$ then
+  \begin{equation*}
+    \begin{aligned}
+      \prob(A_{t})
+      &= \prob(A_{t-1})-\expec[\ind{A_{t-1}}\tau_{t}]\\
+      &= \prob(A_{t-1})\left(1-\expec[\tau_{t}\mid A_{t-1}]\right).
+    \end{aligned}
+  \end{equation*}
+  By definition, $\expec[\tau_{t}\mid A_{t-1}]=\lambda_{t}^{M}$ whenever $\prob(A_{t-1})>0$, and the identity holds trivially when $\prob(A_{t-1})=0$.
+  Therefore, for all $t\in\{1,\dots,T\}$,
+  \begin{equation*}
+    \prob(A_{t})=\prob(A_{t-1})(1-\lambda_{t}^{M})^{M_{t}}.
+  \end{equation*}
+  Iterating from $t=1$ to $t=T$ yields
+  \begin{equation*}
+    \prob(\sigma_{M}>T)=\prob(A_{T})=\prod_{t=1}^{T}(1-\lambda_{t}^{M})^{M_{t}},
+  \end{equation*}
+  and taking complements gives the displayed formula for $\prob(F_{T}(M))$.
+
+  For the open-loop reduction, fix $t$ and let $k_{t}:=\lfloor n\lambda_{t}^{M}\rfloor\in\{0,\dots,n-1\}$ and $r_{t}:=n\lambda_{t}^{M}-k_{t}\in[0,1)$.
+  Define $\bar{\tau}_{t}\in\{0,1/n,\dots,(n-1)/n\}$ by
+  \begin{equation*}
+    \bar{\tau}_{t}
+    :=
+    \begin{cases}
+      k_{t}/n, & \text{with probability }1-r_{t},\\
+      (k_{t}+1)/n, & \text{with probability }r_{t}.
+    \end{cases}
+  \end{equation*}
+  Then $\expec[\bar{\tau}_{t}]=\lambda_{t}^{M}$.
+  Sample $(\bar{\tau}_{t})_{t=1}^{T}$ independently across $t$ at time $0$ and commit to this schedule.
+  By Lemma~\ref{lem:product-given-schedule},
+  \begin{equation*}
+    \begin{aligned}
+      \prob\left(\bigcap_{t\in S(M)}\{p_{t}>\bar{\tau}_{t}\}\right)
+      &= \expec\left[\prod_{t\in S(M)}(1-\bar{\tau}_{t})\right]\\
+      &= \prod_{t\in S(M)}\expec[1-\bar{\tau}_{t}]\\
+      &= \prod_{t\in S(M)}(1-\lambda_{t}^{M}),
+    \end{aligned}
+  \end{equation*}
+  where we used independence in the second equality.
+  Taking complements yields the claimed equality of masked failure probabilities.
+\end{appendixproof}
+
+\begin{corollary}[Law of the masked stopping time]
+  \label{cor:sigma-law}
+  Assume the setting of Theorem~\ref{thm:no-adaptivity}.
+  Then for each $t\in\{0,1,\dots,T\}$,
+  \begin{equation*}
+    \prob(\sigma_{M}>t)=\prod_{i=1}^{t}(1-\lambda_{i}^{M})^{M_{i}}.
+  \end{equation*}
+  In particular, the law of $\sigma_{M}$ is uniquely determined by the deterministic hazard sequence $(\lambda_{t}^{M})_{t=1}^{T}$.
+  Moreover, the open-loop randomized schedule constructed in Theorem~\ref{thm:no-adaptivity} yields a masked stopping time $\bar{\sigma}_{M}$ with the same distribution as $\sigma_{M}$.
+\end{corollary}
+
+\begin{appendixproof}{Proof of Corollary~\ref{cor:sigma-law}}
+  The identity for $\prob(\sigma_{M}>t)$ follows by applying the survival recursion in the proof of Theorem~\ref{thm:no-adaptivity} up to time $t$.
+  The open-loop schedule in Theorem~\ref{thm:no-adaptivity} satisfies
+  \begin{equation*}
+    \prob(\bar{\sigma}_{M}>t)=\expec\left[\prod_{i=1}^{t}(1-\bar{\tau}_{i})^{M_{i}}\right]=\prod_{i=1}^{t}(1-\lambda_{i}^{M})^{M_{i}},
+  \end{equation*}
+  where we used independence of the open-loop coordinates and $\expec[\bar{\tau}_{i}]=\lambda_{i}^{M}$.
+\end{appendixproof}
+
+\begin{corollary}[No adaptivity gain for risk and additive cost until failure]
+  \label{cor:no-adaptivity-cost}
+  Assume the setting of Theorem~\ref{thm:no-adaptivity} and fix measurable functions $c_{1},\dots,c_{T}$ on the grid $\{0,1/n,\dots,(n-1)/n\}$.
+  Define the pre-failure cost
+  \begin{equation*}
+    C := \sum_{t=1}^{T} c_{t}(\tau_{t})\ind{\sigma_{M}>t-1}.
+  \end{equation*}
+  Then there exists an open-loop randomized schedule $(\tilde{\tau}_{t})_{t=1}^{T}$ sampled at time $0$ such that
+  \begin{equation*}
+    \prob\left(\exists t\in\{1,\dots,T\}:\ M_{t}=1 \wedge p_{t}\le \tilde{\tau}_{t}\right)=\prob\bigl(F_{T}(M)\bigr)
+  \end{equation*}
+  and
+  \begin{equation*}
+    \expec\left[\sum_{t=1}^{T} c_{t}(\tilde{\tau}_{t})\ind{\tilde{\sigma}_{M}>t-1}\right]=\expec[C],
+  \end{equation*}
+  where $\tilde{\sigma}_{M}:=\inf\{t\in\{1,\dots,T\}:\ M_{t}=1 \wedge p_{t}\le \tilde{\tau}_{t}\}$.
+\end{corollary}
+
+\begin{appendixproof}{Proof of Corollary~\ref{cor:no-adaptivity-cost}}
+  For each $t\in\{1,\dots,T\}$ define the conditional law
+  \begin{equation*}
+    \mu_{t}(\cdot) := \prob\bigl(\tau_{t}\in\cdot\mid \sigma_{M}>t-1\bigr)
+  \end{equation*}
+  on $\{0,1/n,\dots,(n-1)/n\}$, interpreting $\mu_{t}$ arbitrarily when $\prob(\sigma_{M}>t-1)=0$.
+  Sample $\tilde{\tau}_{t}\sim\mu_{t}$ independently across $t$ at time $0$.
+  By construction,
+  \begin{equation*}
+    \expec[\tilde{\tau}_{t}] = \expec[\tau_{t}\mid \sigma_{M}>t-1] = \lambda_{t}^{M}.
+  \end{equation*}
+  Therefore Theorem~\ref{thm:no-adaptivity} implies equality of masked failure probabilities.
+
+  For the cost identity, note that for each $t$ the random variable $\tilde{\tau}_{t}$ is independent of the pre-$t$ event $\{\tilde{\sigma}_{M}>t-1\}$.
+  Hence
+  \begin{equation*}
+    \expec\bigl[c_{t}(\tilde{\tau}_{t})\ind{\tilde{\sigma}_{M}>t-1}\bigr] = \prob(\tilde{\sigma}_{M}>t-1)\expec[c_{t}(\tilde{\tau}_{t})].
+  \end{equation*}
+  By the definition of $\mu_{t}$, we have $\expec[c_{t}(\tilde{\tau}_{t})]=\expec[c_{t}(\tau_{t})\mid \sigma_{M}>t-1]$.
+  Moreover, $\prob(\tilde{\sigma}_{M}>t-1)=\prod_{i=1}^{t-1}(1-\lambda_{i}^{M})^{M_{i}}=\prob(\sigma_{M}>t-1)$ by the survival recursion in the proof of Theorem~\ref{thm:no-adaptivity}.
+  Therefore
+  \begin{equation*}
+    \expec\bigl[c_{t}(\tilde{\tau}_{t})\ind{\tilde{\sigma}_{M}>t-1}\bigr]
+    =
+    \prob(\sigma_{M}>t-1)\expec[c_{t}(\tau_{t})\mid \sigma_{M}>t-1]
+    =
+    \expec\bigl[c_{t}(\tau_{t})\ind{\sigma_{M}>t-1}\bigr].
+  \end{equation*}
+  Summing over $t$ yields the claim.
+\end{appendixproof}
+
+\begin{remark}[Summary and scope of the open-loop reduction]
+  Theorem~\ref{thm:no-adaptivity} and its corollaries establish that, for any fixed deterministic mask $M$, an open-loop randomized schedule can replicate any closed-loop policy with respect to:
+  \emph{(i)} the masked failure probability $\prob(F_{T}(M))$,
+  \emph{(ii)} the full law of the masked stopping time $\sigma_{M}$ (Corollary~\ref{cor:sigma-law}), and
+  \emph{(iii)} any additive cost $\sum c_{t}(\tau_{t})\ind{\sigma_{M}>t-1}$ accrued until the first monitored error (Corollary~\ref{cor:no-adaptivity-cost}).
+  The stopped cost in \emph{(iii)} is the operationally relevant measure: in a monitoring setting, the first alarm triggers intervention (stop, reset, or retrain), so performance after the alarm is not meaningful.
+
+  Given a family $\mcal_{0}\subseteq\{0,1\}^{T}$, define the union mask $M^{\cup}_{t}:=\max_{M\in\mcal_{0}} M_{t}$ and the family alarm time $\sigma_{\cup}:=\sigma_{M^{\cup}}$.
+  Applying the above results with $M^{\cup}$ shows that open-loop suffices for the family-level alarm event $F_{T}(M^{\cup})=\bigcup_{M\in\mcal_{0}}F_{T}(M)$.
+
+  For deterministic open-loop schedules, the hazard simplifies to $\lambda_{t}^{M}=\tau_{t}$ regardless of $M$, yielding the exact product form $\prob(F_{T}(M))=1-\prod_{t\in S(M)}(1-\tau_{t})$.
+  Ville's hazard sequence can always be replicated by an open-loop schedule (Theorem~\ref{thm:no-adaptivity}), but Ville's guarantee relies on the distribution-free supermartingale bound, whereas the product form exploits the known i.i.d.\ kernel directly.
+  Taking logarithms converts the product constraint into linear log-budget constraints, which is the basis for the exact design methods in Section~\ref{sec:finite}.
+\end{remark}
+
+\subsection{Suffix validity and geometric tail control}
+\label{sec:suffix-validity}
+
+The preceding results show that open-loop schedules match the first-error probability of any closed-loop policy.
+We now show that open-loop schedules satisfy a much stronger validity notion, automatically and for free.
+
+\begin{definition}[Suffix validity]
+  \label{def:suffix-valid}
+  Fix a mask family $\mcal_{0}\subseteq\{0,1\}^{T}$.
+  A policy $(\tau_{t})_{t=1}^{T}$ is \emph{suffix-valid at level $\alpha$} if, for every $s\in\{0,1,\dots,T-1\}$,
+  \begin{equation*}
+    \sup_{M\in\mcal_{0}}\prob\bigl(\exists t>s:\ M_{t}=1 \wedge p_{t}\le\tau_{t}\bigr)\le\alpha.
+  \end{equation*}
+\end{definition}
+
+Suffix validity requires that, at any time $s$ during deployment---not only after errors---the remaining schedule provides a fresh $\alpha$-level guarantee uniformly over all masks.
+This is the strongest natural validity notion: it implies restart-validity (the guarantee renews at error times) and standard validity (take $s=0$).
+
+\begin{proposition}[Suffix validity is free for open-loop]
+  \label{prop:suffix-validity}
+  Assume Lemma~\ref{lem:iid-pvalues}.
+  Let $(\tau_{t})_{t=1}^{T}$ be a deterministic open-loop schedule satisfying standard family validity:
+  \begin{equation*}
+    \sup_{M\in\mcal_{0}}\bigl(1-\prod_{t\in S(M)}(1-\tau_{t})\bigr)\le\alpha.
+  \end{equation*}
+  Then $(\tau_{t})$ is suffix-valid at level $\alpha$.
+\end{proposition}
+
+\begin{appendixproof}{Proof of Proposition~\ref{prop:suffix-validity}}
+  In log-budget variables $s_{t}=-\log(1-\tau_{t})\ge 0$ and $L=-\log(1-\alpha)$, standard family validity is $\max_{M\in\mcal_{0}}\sum_{t\in S(M)} s_{t}\le L$.
+  For any $s\in\{0,\dots,T-1\}$ and any $M\in\mcal_{0}$,
+  \begin{equation*}
+    \sum_{\substack{t\in S(M)\\t>s}} s_{t}
+    \le
+    \sum_{t\in S(M)} s_{t}
+    \le L,
+  \end{equation*}
+  since each $s_{t}\ge 0$.
+  Taking the monotone transformation back gives $1-\prod_{\substack{t\in S(M)\\t>s}}(1-\tau_{t})\le\alpha$.
+\end{appendixproof}
+
+\begin{corollary}[Geometric tail bound on the number of monitored errors]
+  \label{cor:geometric-tail}
+  Under the conditions of Proposition~\ref{prop:suffix-validity}, let $N_{T}^{M}:=\#\{t\in S(M):p_{t}\le\tau_{t}\}$ denote the total number of monitored errors.
+  Then, for every $M\in\mcal_{0}$ and every $k\ge 1$,
+  \begin{equation*}
+    \prob(N_{T}^{M}\ge k)\le\alpha^{k},
+  \end{equation*}
+  and in particular $\expec[N_{T}^{M}]\le\alpha/(1-\alpha)$.
+\end{corollary}
+
+\begin{appendixproof}{Proof of Corollary~\ref{cor:geometric-tail}}
+  Let $\sigma_{1}<\sigma_{2}<\cdots$ denote the successive monitored error times under mask $M$.
+  By suffix validity, $\prob(\sigma_{j+1}\le T\mid\sigma_{j}=s)\le\alpha$ for all $j$ and all $s$ with $\prob(\sigma_{j}=s)>0$.
+  Therefore
+  \begin{equation*}
+    \prob(N_{T}^{M}\ge k)=\prob(\sigma_{k}\le T)=\sum_{s}\prob(\sigma_{k}\le T\mid\sigma_{k-1}=s)\prob(\sigma_{k-1}=s)\le\alpha\prob(N_{T}^{M}\ge k-1).
+  \end{equation*}
+  Iterating from $\prob(N_{T}^{M}\ge 1)\le\alpha$ yields $\prob(N_{T}^{M}\ge k)\le\alpha^{k}$.
+  Summing over $k$ gives $\expec[N_{T}^{M}]\le\sum_{k\ge 1}\alpha^{k}=\alpha/(1-\alpha)$.
+\end{appendixproof}
+
+\subsection{Comparison with Ville}
+\label{sec:ville-compare}
+
+The Ville bound $\prob(\sup_{t\ge 1}\K_{t}\ge 1/\alpha)\le\alpha$ is distribution-free and applies to any nonnegative supermartingale.
+In the batched conformal setting, the null kernel is explicit and i.i.d.\ on a finite grid, and this extra structure changes what can be done.
+
+\paragraph{Discarding the i.i.d.\ structure.}
+Ville's inequality treats $\K_{t}=\prod_{i=1}^{t} f(p_{i})$ as a generic wealth process and does not use the exact grid-uniform law of $p_{t}$.
+In contrast, deterministic open-loop schedules admit an exact product form for masked failure probabilities, and mask-validity reduces to explicit constraints that can be optimized exactly (Sections~\ref{sec:finite}--\ref{sec:infinite}).
+
+\paragraph{Unpredictable, expanding prediction sets.}
+Because Ville thresholds are predictable random variables adapted to $\F_{t-1}$, prediction set sizes are not fixed at deployment.
+Moreover, the effective $p$-value threshold typically shrinks over time as wealth accumulates, so prediction sets expand in long-horizon deployments.
+
+\paragraph{No suffix or restart-style guarantees.}
+Ville controls only the first boundary crossing event.
+It does not imply suffix validity, so it provides no guarantee on the remaining predictions after an alarm.
+By contrast, open-loop schedules satisfy suffix validity automatically (Proposition~\ref{prop:suffix-validity}) and therefore yield geometric control of repeated monitored errors (Corollary~\ref{cor:geometric-tail}).
+
+\paragraph{Controlling the wrong event for masked monitoring.}
+Ville corresponds to monitoring every time step (the all-ones mask).
+When the deployed contract specifies a smaller family $\mcal_{0}$, Ville allocates error budget to unmonitored times and can be overly conservative.
+Section~\ref{sec:ville} makes these comparisons precise by expressing Ville boundary crossing in $p$-value language and by characterizing the resulting predictable hazards.
+
+\subsection{Operational implications}
+\label{sec:operational}
+
+\paragraph{Predictability.}
+Open-loop thresholds are fixed before deployment: the operator knows in advance the prediction set size at each time $t$.
+This enables planning for resource allocation, staffing, and downstream decisions.
+Ville-style thresholds are random variables adapted to $\F_{t-1}$, making prediction set sizes unpredictable.
+
+\paragraph{Replanning at errors.}
+If continued deployment after errors is desired, the operator can re-solve the MILP on the suffix $(s,T]$ with a fresh budget $L=-\log(1-\alpha)$ whenever an error occurs at time $s$.
+This is equivalent to a restart-valid closed-loop policy (each segment is independently valid) but uses only open-loop tools: a new MILP solve at each restart.
+The fixed open-loop schedule already satisfies suffix validity (Proposition~\ref{prop:suffix-validity}) and provides the geometric tail (Corollary~\ref{cor:geometric-tail}), so replanning is an optional optimization, not a necessity.
+
+Having established open-loop sufficiency and the accompanying strengthened validity notions, we turn to finite-horizon design and to admissible cost-adaptive closed-loop policies built from the same design engine.
+
+\fi
+
+\section{Optimal scheduling}
+\label{sec:finite}
+
+Fix a horizon $T\in\N$ and a mask family $\mcal_{0}\subseteq\{0,1\}^{T}$.
+For $M\in\{0,1\}^{T}$ write $S(M):=\{t\in\{1,\dots,T\}:\ M_{t}=1\}$ and recall the masked failure event $F_T(M)=\{\exists t\in S(M):\ p_t\le \tau_t\}$.
+To simplify notation, assume a constant batch size $n_t\equiv n$ and restrict $\tau_t\in[0,(n-1)/n]$.
+
+Given per-time costs $(c_t)_{t=1}^{T}$, the open-loop design problem at level $\alpha\in(0,1)$ is
+\begin{equation}
+  \label{eq:design-problem}
+  \begin{aligned}
+    \min_{0 \le \tau_{1},\dots,\tau_{T}\le (n-1)/n}\quad & \sum_{t=1}^{T} c_t(\tau_t)\\
+    \text{s.t.}\quad & 1-\prod_{t\in S(M)}(1-\tau_t)\le \alpha,\\
+    & \forall M\in\mcal_{0}.
+  \end{aligned}
+\end{equation}
+When $\tau_t$ is restricted to the conformal grid $\{0,1/n,\dots,(n-1)/n\}$, the constraint is exact by Proposition~\ref{prop:iid-pvalues} and \eqref{eq:mask-failure-product}; for general $\tau_t$ it remains conservative for the discrete conformal kernel.
+
+Introduce $s_t:=-\log(1-\tau_t)$ and $L:=-\log(1-\alpha)$.
+Then $\tau_t\in[0,(n-1)/n]$ is equivalent to $s_t\in[0,\log(n)]$, and the product constraints in \eqref{eq:design-problem} are equivalent to the linear system
+\begin{equation*}
+  \sum_{t\in S(M)} s_t \le L,\qquad \forall M\in\mcal_{0},
+\end{equation*}
+as in \eqref{eq:mask-linear-constraints}.
+Defining transformed costs $\tilde{c}_t(s):=c_t(1-\exp(-s))$, the design problem becomes
+\begin{equation}
+  \label{eq:design-problem-log}
+  \begin{aligned}
+    \min_{0 \le s_{1},\dots,s_{T}\le \log(n)}\quad & \sum_{t=1}^{T} \tilde{c}_t(s_t)\\
+    \text{s.t.}\quad & \sum_{t=1}^{T} M_t s_t \le L,\qquad \forall M\in\mcal_{0}.
+  \end{aligned}
+\end{equation}
+We do not discuss computation here and treat \eqref{eq:design-problem-log} as a design primitive.
+
+\subsection{Closed-loop replanning under predictable costs}
+\label{sec:replanning}
+The open-loop schedule in \eqref{eq:design-problem} assumes that the costs $(c_t)$ are known at deployment.
+In monitoring systems, costs may drift with predictable operational factors, model updates, or covariate forecasts.
+Since Proposition~\ref{prop:iid-pvalues} implies that past test outcomes cannot improve future validity, closed-loop policies are useful only to respond to evolving costs while maintaining the same mask constraints.
+
+\paragraph{Admissible information.}
+Let $(\G_t)_{t\ge 0}$ be the pre-label filtration generated by all past calibration batches and internal randomness, but excluding test labels and hence excluding realized conformal $p$-values.
+An \emph{admissible} policy selects each $s_t$ (equivalently $\tau_t$) as a $\G_{t-1}$-measurable random variable.
+
+\paragraph{Forecasts and pathwise viewpoint.}
+We treat the realized cost curves $(\tilde{c}_t)_{t=1}^{T}$ and the forecast array $(\hat{c}_{t,u})_{1 \le t \le u \le T}$ as fixed functions.
+At time $t$, before selecting $s_t$, the policy has access to forecasts $\hat{c}_{t,u}$ for stages $u\ge t$; after choosing $s_t$, the realized stage cost $\tilde{c}_t(s_t)$ is incurred.
+All regret statements below are pathwise in the realized and forecast costs.
+
+\paragraph{State and value functions.}
+For each mask $M\in\mcal_{0}$, define the remaining log-budget at time $t$ by
+\begin{equation}
+  \label{eq:budget-state-sec4}
+  b_t(M) := L - \sum_{u < t} M_u s_u,
+\end{equation}
+and let $\mathbf{b}_t := (b_t(M))_{M\in\mcal_{0}}$.
+Define the incidence direction $\mathbf{m}_t := (M_t)_{M\in\mcal_{0}}$, so $\mathbf{b}_{t+1}=\mathbf{b}_t-s_t \mathbf{m}_t$.
+The one-step feasible set is
+\begin{equation}
+  \label{eq:Scal-sec4}
+  \scalt(\mathbf{b})
+  :=
+  \left[0,\ \min\left\{\log(n),\ \inf_{\substack{M\in\mcal_{0}\\ M_t=1}} b(M)\right\}\right],
+\end{equation}
+with the convention $\inf\emptyset=+\infty$.
+
+For $t\in\{1,\dots,T\}$ and $\mathbf{b}\in\R_{\ge 0}^{|\mcal_{0}|}$, define the tail value function
+\begin{equation}
+  \label{eq:value-function-sec4}
+  V_t(\mathbf{b})
+  :=
+  \min_{\substack{0 \le s_{t:T} \le \log(n)\\
+  \sum_{u=t}^{T} M_u s_u \le b(M),\ \forall M\in\mcal_{0}}}
+  \sum_{u=t}^{T} \tilde{c}_u(s_u),
+\end{equation}
+with terminal condition $V_{T+1}(\cdot)=0$.
+At each time $t$, define forecasted value functions $(\hat{V}_{u\mid t})_{u=t}^{T+1}$ by replacing $\tilde{c}_v$ with $\hat{c}_{t,v}$ in \eqref{eq:value-function-sec4} for stages $v\ge u$, again with $\hat{V}_{T+1\mid t}(\cdot)=0$.
+
+\paragraph{Sequential replanning.}
+The replanning policy selects
+\begin{equation}
+  \label{eq:replan-action}
+  s_t \in \operatorname*{argmin}_{s\in\scalt(\mathbf{b}_t)}
+  \left[\hat{c}_{t,t}(s) + \hat{V}_{t+1\mid t}(\mathbf{b}_t-s\mathbf{m}_t)\right],
+\end{equation}
+and updates $\mathbf{b}_{t+1}=\mathbf{b}_t-s_t\mathbf{m}_t$.
+This is a sequential replanning rule: the policy repeatedly solves a forecasted tail problem and commits only to the next allocation.
+
+\paragraph{Validity by construction.}
+Any admissible policy that maintains the log-budget constraints pathwise is mask-valid under Proposition~\ref{prop:iid-pvalues}.
+\begin{proposition}[Validity of admissible replanning under pathwise feasibility]
+  \label{prop:replan-validity}
+  Assume Proposition~\ref{prop:iid-pvalues} and fix $\alpha\in(0,1)$.
+  Let $(\tau_t)_{t=1}^{T}$ be any admissible policy and write $s_t=-\log(1-\tau_t)$ and $L=-\log(1-\alpha)$.
+  If
+  \begin{equation*}
+    \sum_{t=1}^{T} M_t s_t \le L
+    \qquad \text{almost surely for all }M\in\mcal_{0},
+  \end{equation*}
+  then the policy is mask-valid at level $\alpha$ over $\mcal_{0}$.
+  Moreover, it is suffix-valid and restart-valid at the same level.
+\end{proposition}
+
+\begin{appendixproof}{Proof of Proposition~\ref{prop:replan-validity}}
+  Fix $M\in\mcal_{0}$ and define $A_t(M):=\bigcap_{i\in S(M)\cap\{1,\dots,t\}}\{p_i>\tau_i\}$, with $A_0(M)=\Omega$.
+  Since $\tau_t$ is $\G_{t-1}$-measurable and $\G_{t-1}\subseteq \F_{t-1}$, Proposition~\ref{prop:iid-pvalues} gives $\prob(p_t>\tau_t\mid \F_{t-1}) = 1-\tau_t$.
+  Therefore $\prob(A_t(M)\mid \F_{t-1})=\ind{A_{t-1}(M)}(1-\tau_t)^{M_t}$, and the process
+  \begin{equation*}
+    B_t(M) := \frac{\ind{A_t(M)}}{\prod_{i=1}^{t}(1-\tau_i)^{M_i}}
+  \end{equation*}
+  is a nonnegative martingale with $\expec[B_T(M)]=1$.
+  The almost-sure constraint implies $\prod_{t\in S(M)}(1-\tau_t)\ge \exp(-L)=1-\alpha$ almost surely.
+  Hence
+  \begin{equation*}
+    1=\expec[B_T(M)] = \expec\left[\frac{\ind{A_T(M)}}{\prod_{t\in S(M)}(1-\tau_t)}\right]
+    \le \frac{\prob(A_T(M))}{1-\alpha},
+  \end{equation*}
+  which gives $\prob(F_T(M))\le \alpha$.
+  Suffix-validity and restart-validity follow because $s_t\ge 0$ implies that the same budget bound holds on every suffix; see Section~\ref{sec:restart}.
+\end{appendixproof}
+
+\paragraph{Regret under forecast errors.}
+We now quantify the performance loss of replanning relative to the offline optimum for the realized costs.
+The bound is controlled by a stage-cost forecasting error and a directional error in the forecasted tail value function.
+
+Define the stage-cost subgradient error
+\begin{equation}
+  \label{eq:eta-def}
+  \eta_t(s)
+  := \sup_{\substack{\hat{g}_c \in \partial \hat{c}_{t,t}(s)\\ g_c \in \partial \tilde{c}_t(s)}} |\hat{g}_c-g_c|,
+  \qquad s\in[0,\log(n)],
+\end{equation}
+and let $\eta_t:=\sup_{s\in[0,\log(n)]}\eta_t(s)$.
+For $t\le T-1$, let
+$\mcal_{0}^{\mathrm{tail}}(t+1):=\{M\in\mcal_{0}:\ \sum_{u=t+1}^{T} M_u>0\}$
+denote the masks that remain active in the tail.
+Define the tail-interior region
+\begin{equation*}
+  \mathcal{B}_{t+1}^\circ
+  :=
+  \left\{\mathbf{b}\in[0,L]^{|\mcal_{0}|}:
+    \begin{aligned}[t]
+      & b(M)>0,\\
+      & \forall M\in\mcal_{0}^{\mathrm{tail}}(t+1)
+    \end{aligned}
+  \right\}.
+\end{equation*}
+For $\mathbf{b}\in\mathcal{B}_{t+1}^\circ$, define the directional value-subgradient error
+\begin{equation}
+  \label{eq:epsilon-def}
+  \epsilon_t(\mathbf{b})
+  := \sup_{\substack{\hat{g}_V\in \partial \hat{V}_{t+1\mid t}(\mathbf{b})\\ g_V\in \partial V_{t+1}(\mathbf{b})}}
+  \left|(\hat{g}_V-g_V)\cdot \mathbf{m}_t\right|,
+\end{equation}
+and let $\epsilon_t:=\sup_{\mathbf{b}\in\mathcal{B}_{t+1}^\circ}\epsilon_t(\mathbf{b})$.
+
+\begin{theorem}[Closed-loop regret bound]
+  \label{thm:replan-regret}
+  Assume each realized cost curve $\tilde{c}_t$ and each forecast curve $\hat{c}_{t,u}$ is proper, closed, convex, and finite on an open neighborhood of $[0,\log(n)]$.
+  Assume also that the replanning trajectory satisfies $\mathbf{b}_{t+1}\in\mathcal{B}_{t+1}^\circ$ for all $t\in\{1,\dots,T\}$.
+  Let $(s_t)_{t=1}^{T}$ be generated by \eqref{eq:replan-action} and define the regret
+  \begin{equation*}
+    \mathrm{Regret} := \sum_{t=1}^{T} \tilde{c}_t(s_t) - V_1(L\1).
+  \end{equation*}
+  Then $\mathrm{Regret}=\sum_{t=1}^{T} \delta_t$, where $\delta_t:=\tilde{c}_t(s_t)+V_{t+1}(\mathbf{b}_{t+1})-V_t(\mathbf{b}_t)$, and
+  \begin{equation*}
+    0 \le \delta_t \le \left(\epsilon_t(\mathbf{b}_{t+1})+\eta_t(s_t)\right)|s_t-s_t^{\star}|
+    \le (\epsilon_t+\eta_t)|s_t-s_t^{\star}|,
+  \end{equation*}
+  where $s_t^{\star}\in\operatorname*{argmin}_{s\in\scalt(\mathbf{b}_t)}[\tilde{c}_t(s)+V_{t+1}(\mathbf{b}_t-s\mathbf{m}_t)]$.
+
+  If, in addition, each $\tilde{c}_t$ is $\mu$-strongly convex on $[0,\log(n)]$ for some $\mu>0$, then
+  \begin{equation*}
+    \mathrm{Regret} \le \frac{1}{2\mu}\sum_{t=1}^{T} (\epsilon_t+\eta_t)^2.
+  \end{equation*}
+\end{theorem}
+
+\begin{appendixproof}{Proof of Theorem~\ref{thm:replan-regret}}
+  This follows the main regret theorem in \texttt{regret\_note.tex}.
+  Define $h_t(s;\mathbf{b}) := \tilde{c}_t(s)+V_{t+1}(\mathbf{b}-s\mathbf{m}_t)$.
+  By splitting the tail program in \eqref{eq:value-function-sec4}, the value function satisfies
+  \begin{equation*}
+    V_t(\mathbf{b}) = \min_{s\in\scalt(\mathbf{b})} h_t(s;\mathbf{b}).
+  \end{equation*}
+  Since $\mathbf{b}_{t+1}=\mathbf{b}_t-s_t\mathbf{m}_t$, the Bellman suboptimality is
+  $\delta_t=h_t(s_t;\mathbf{b}_t)-\min_{s\in\scalt(\mathbf{b}_t)} h_t(s;\mathbf{b}_t)\ge 0$.
+  Summing $\delta_t$ over $t$ telescopes to $\sum_{t=1}^{T}\tilde{c}_t(s_t)-V_1(L\1)$ because $V_{T+1}(\cdot)=0$ and $\mathbf{b}_1=L\1$.
+
+  For the one-step bound, define $\hat{h}_t(s;\mathbf{b}) := \hat{c}_{t,t}(s)+\hat{V}_{t+1\mid t}(\mathbf{b}-s\mathbf{m}_t)$.
+  Since $s_t$ minimizes $\hat{h}_t(\cdot;\mathbf{b}_t)$ over $\scalt(\mathbf{b}_t)$, there exists $\hat{g}\in\partial \hat{h}_t(s_t;\mathbf{b}_t)$ with $\hat{g}(s_t^{\star}-s_t)\ge 0$.
+  For any $g\in \partial h_t(s_t;\mathbf{b}_t)$, the subgradient inequality yields
+  \begin{equation*}
+    \delta_t \le g(s_t-s_t^{\star}) = (g-\hat{g})(s_t-s_t^{\star}) + \hat{g}(s_t-s_t^{\star})
+    \le |g-\hat{g}|\,|s_t-s_t^{\star}|.
+  \end{equation*}
+  Decomposing $g$ and $\hat{g}$ into stage and value-function subgradients gives
+  $|g-\hat{g}|\le \eta_t(s_t)+\epsilon_t(\mathbf{b}_{t+1})$, which yields the displayed bound.
+
+  Under $\mu$-strong convexity, $h_t(\cdot;\mathbf{b}_t)$ is $\mu$-strongly convex on $\scalt(\mathbf{b}_t)$ and maximizing the resulting quadratic upper bound gives
+  $\delta_t \le (\eta_t(s_t)+\epsilon_t(\mathbf{b}_{t+1}))^2/(2\mu)$.
+  Summing over $t$ yields the stated regret bound.
+\end{appendixproof}
+
+\paragraph{Special cases: all-ones and window masks.}
+Theorem~\ref{thm:replan-regret} is stated for an arbitrary mask family.
+For common families, the directional value error $\epsilon_t(\cdot)$ can be bounded explicitly in terms of derivative forecast errors.
+
+Assume that each realized cost curve $\tilde{c}_u$ and each forecast curve $\hat{c}_{t,u}$ is twice continuously differentiable on $(0,\log(n))$ and that, for all $s\in(0,\log(n))$,
+\begin{equation*}
+  \begin{aligned}
+    \mu \le \tilde{c}_u''(s) \le \beta,\\
+    \mu \le \hat{c}_{t,u}''(s) \le \beta,
+  \end{aligned}
+\end{equation*}
+for constants $0<\mu\le \beta$.
+Define the derivative forecast errors
+\begin{equation}
+  \label{eq:derivative-error}
+  e_{t,u} := \sup_{s\in[0,\log(n)]}\left|\tilde{c}_u'(s) - \hat{c}_{t,u}'(s)\right|,
+  \qquad 1 \le t \le u \le T,
+\end{equation}
+and write $\kappa:=\beta/\mu$.
+
+\begin{theorem}[All-ones mask: multiplier error bound]
+  \label{thm:epsilon-allones}
+  Assume $\mcal_{0}=\{\1\}$ and that the tail value functions are differentiable on $(0,L]$.
+  For $t\in\{1,\dots,T-1\}$ and $b\in(0,L]$, define
+  \begin{equation*}
+    \epsilon_t(b)
+    :=
+    \sup_{\substack{\hat{g}\in \partial \hat{V}_{t+1\mid t}(b)\\ g\in \partial V_{t+1}(b)}}
+    |\hat{g}-g|.
+  \end{equation*}
+  Then
+  \begin{equation*}
+    \epsilon_t(b) \le \kappa \bar{e}_{t,>t},
+    \qquad
+    \bar{e}_{t,>t}:=\frac{1}{T-t}\sum_{u=t+1}^{T} e_{t,u}.
+  \end{equation*}
+\end{theorem}
+
+\begin{appendixproof}{Proof of Theorem~\ref{thm:epsilon-allones}}
+  This matches the all-ones multiplier sensitivity bound in \texttt{regret\_note.tex}.
+  Under the smooth strong convexity assumptions and tail-interiority, the scalar tail programs satisfy strong duality with unique multipliers $\lambda(b)$ and $\hat{\lambda}(b)$.
+  Moreover the value functions are differentiable and satisfy $V_{t+1}'(b)=-\lambda(b)$ and $\hat{V}_{t+1\mid t}'(b)=-\hat{\lambda}(b)$, so $\epsilon_t(b)=|\lambda(b)-\hat{\lambda}(b)|$.
+  The multiplier discrepancy is controlled by the average derivative forecast error $\bar{e}_{t,>t}$ through the inverse Lipschitz properties of the aggregate coordinate response maps; see \texttt{regret\_note.tex} for the full argument.
+\end{appendixproof}
+
+\begin{corollary}[Total regret for the all-ones mask]
+  \label{cor:regret-allones}
+  In the setting of Theorem~\ref{thm:replan-regret} (strongly convex case) with $\mcal_{0}=\{\1\}$, assume also the differentiability and curvature bounds above.
+  Then the replanning regret satisfies
+  \begin{equation*}
+    \mathrm{Regret}
+    \le \frac{\kappa^{2}}{\mu}\sum_{t=1}^{T-1} \bar{e}_{t,>t}^{2}
+    + \frac{1}{\mu}\sum_{t=1}^{T} e_{t,t}^{2}.
+  \end{equation*}
+\end{corollary}
+
+\begin{appendixproof}{Proof of Corollary~\ref{cor:regret-allones}}
+  Under differentiability, $\partial \tilde{c}_t(s_t)=\{\tilde{c}_t'(s_t)\}$ and $\partial \hat{c}_{t,t}(s_t)=\{\hat{c}_{t,t}'(s_t)\}$, so $\eta_t(s_t)=|\tilde{c}_t'(s_t)-\hat{c}_{t,t}'(s_t)|\le e_{t,t}$.
+  The strongly convex regret bound in Theorem~\ref{thm:replan-regret} gives
+  \begin{equation*}
+    \mathrm{Regret}\le \frac{1}{2\mu}\sum_{t=1}^{T}\left(\epsilon_t(\mathbf{b}_{t+1})+\eta_t(s_t)\right)^2.
+  \end{equation*}
+  In the all-ones case, Theorem~\ref{thm:epsilon-allones} implies $\epsilon_t(\mathbf{b}_{t+1})\le \kappa \bar{e}_{t,>t}$ for $t\le T-1$ and $\epsilon_T(\cdot)=0$.
+  Using $(a+b)^2\le 2a^2+2b^2$ yields
+  \begin{equation*}
+    \sum_{t=1}^{T}\left(\epsilon_t(\mathbf{b}_{t+1})+\eta_t(s_t)\right)^2
+    \le
+    2\kappa^2\sum_{t=1}^{T-1}\bar{e}_{t,>t}^2 + 2\sum_{t=1}^{T} e_{t,t}^2,
+  \end{equation*}
+  and multiplying by $(2\mu)^{-1}$ gives the claim.
+\end{appendixproof}
+
+\begin{theorem}[Window masks: directional multiplier sensitivity]
+  \label{thm:epsilon-window}
+  Fix $K\in\{1,\dots,T\}$ and let $\mcal_{0}=\mcal_{0}^{\mathrm{win}}(K)$ be the family of masks $M^{(i)}$, $i\in\{1,\dots,T-K+1\}$, with $M^{(i)}_u=1$ if $u\in\{i,\dots,i+K-1\}$ and $M^{(i)}_u=0$ otherwise.
+  Under the differentiability and curvature bounds above and tail-interiority, there exist constants $C\ge 0$ and $\rho\in(0,1)$, depending only on $K$ and a banded conditioning quantity defined in \texttt{regret\_note.tex}, such that for all $t\in\{1,\dots,T-1\}$ and all $\mathbf{b}\in\mathcal{B}_{t+1}^\circ$,
+  \begin{equation*}
+    \epsilon_t(\mathbf{b})
+    \le
+    \frac{C K^{2}}{\mu}\sum_{u=t+1}^{T} \rho^{\max\{0,(u-t)-(K-1)\}} e_{t,u}.
+  \end{equation*}
+\end{theorem}
+
+\begin{appendixproof}{Proof of Theorem~\ref{thm:epsilon-window}}
+  This matches the window-mask directional multiplier sensitivity bound in \texttt{regret\_note.tex}.
+  The proof identifies the directional value-subgradient discrepancy with an aggregate discrepancy of KKT multipliers for the window constraints, and then bounds the latter by linearizing the KKT system.
+  The resulting linear system involves a symmetric positive definite $(K-1)$-banded matrix; applying entrywise decay bounds for the inverse yields the geometric weights $\rho^{\max\{0,(u-t)-(K-1)\}}$.
+\end{appendixproof}
+
+\begin{corollary}[Window masks: warm-up sensitivity bound]
+  \label{cor:epsilon-window-warm}
+  In the setting of Theorem~\ref{thm:epsilon-window}, suppose $t\ge K-1$.
+  Define, for $u\in\{t+1,\dots,T\}$,
+  \begin{equation*}
+    \begin{split}
+      \gamma_t(u)
+      &:= \ind{u \equiv t \pmod{K}}\\
+      &\quad + \ind{u \equiv t+1 \pmod{K}}.
+    \end{split}
+  \end{equation*}
+  Then, for all $\mathbf{b}\in\mathcal{B}_{t+1}^\circ$,
+  \begin{equation*}
+    \epsilon_t(\mathbf{b}) \le \sum_{u=t+1}^{T} \gamma_t(u)\, e_{t,u}.
+  \end{equation*}
+\end{corollary}
+
+\begin{appendixproof}{Proof of Corollary~\ref{cor:epsilon-window-warm}}
+  This matches the warm-up sensitivity bound in \texttt{regret\_note.tex}.
+  Once $t\ge K-1$, the tail window incidence matrix has an exact triangular structure, and the multiplier discrepancy in the direction $\mathbf{m}_t$ admits an explicit representation with coefficients in $\{0,\pm 1\}$.
+  Translating those coefficients back to time indices yields the selector $\gamma_t$.
+\end{appendixproof}
+
+\begin{corollary}[Window masks: regret bound under derivative forecast errors]
+  \label{cor:regret-window}
+  In the setting of Theorem~\ref{thm:replan-regret} (strongly convex case) with $\mcal_{0}=\mcal_{0}^{\mathrm{win}}(K)$, assume also the differentiability and curvature bounds above.
+  Define
+  \begin{equation*}
+    \bar{\epsilon}_t
+    :=
+    \frac{C K^{2}}{\mu}\sum_{u=t+1}^{T} \rho^{\max\{0,(u-t)-(K-1)\}} e_{t,u}.
+  \end{equation*}
+  Then
+  \begin{equation*}
+    \mathrm{Regret} \le \frac{1}{2\mu}\sum_{t=1}^{T}\left(e_{t,t}+\bar{\epsilon}_t\right)^2.
+  \end{equation*}
+\end{corollary}
+
+\begin{appendixproof}{Proof of Corollary~\ref{cor:regret-window}}
+  The argument is identical to Corollary~\ref{cor:regret-allones}, using $\eta_t(s_t)\le e_{t,t}$ under differentiability, Theorem~\ref{thm:replan-regret}, and the bound from Theorem~\ref{thm:epsilon-window} on $\epsilon_t(\mathbf{b}_{t+1})$.
+\end{appendixproof}
+
+The finite-horizon design assumes a fixed horizon $T$.
+We now study the infinite-horizon regime and the minimal inflation implied by anytime-style constraints.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Discussion}
+Mask-valid conformal prediction replaces anytime monitoring by a family of structured monitoring rules specified ex ante, while treating the realized mask as unobserved online.
+In the batched sequential model under conditional exchangeability, randomized conformal $p$-values are grid-uniform conditional on the past, which implies independence from the past and i.i.d.\ $p$-values across time even without batch independence.
+This i.i.d.\ structure yields an exact finite-horizon evaluation formula and a log-budget reduction of mask-validity to linear constraints.
+Computational aspects of large mask families are deferred; Appendix~\ref{app:windows-flow} gives one concrete polynomial-time solver for sliding-window masks.
+On the infinite horizon, Theorem~\ref{thm:rho-star} formalizes slow inflation as an optimization problem and shows that $1/t$ (up to iterated logarithms) is the sharp limit for valid open-loop inflation.
+Finally, Corollary~\ref{cor:ville-hazard} and Proposition~\ref{prop:no-product-predictable} clarify the mismatch between deterministic open-loop guarantees and Ville boundary crossing under predictable wealth-based thresholds.
+
+\bibliography{references}
+\appendix
+\onecolumn
+
+% \section{Contiguous-window masks: min-cost flow design}
+% \label{app:windows-flow}
+% This appendix gives a polynomial-time exact solver for a convex design class under the contiguous-window family $\mcal_{0}^{\mathrm{win}}(K)$.
+% The resulting schedules may use continuous thresholds, but remain valid for the discrete conformal kernel by Proposition~\ref{prop:off-grid-conservative}.
+
+% \begin{proposition}[Off-grid conservativeness for discrete conformal kernels]
+%   \label{prop:off-grid-conservative}
+%   Assume Proposition~\ref{prop:iid-pvalues}.
+%   Fix a horizon $T\in\N$, a deterministic mask $M\in\{0,1\}^{T}$, and deterministic thresholds $\tau_{1:T}$ with $\tau_t\in[0,1)$.
+%   For each $t$, define the grid projection
+%   \begin{equation*}
+%     \tau_t^{\downarrow}
+%     :=
+%     \max\left\{\frac{k}{n_t}:\ k\in\{0,1,\dots,n_t-1\},\ \frac{k}{n_t}\le \tau_t\right\},
+%   \end{equation*}
+%   with the convention $\max\emptyset=0$.
+%   Then $F_T(M)=\{\exists t\in S(M):\ p_t\le\tau_t\}$ coincides with the grid-threshold event $\{\exists t\in S(M):\ p_t\le\tau_t^{\downarrow}\}$, and
+%   \begin{equation*}
+%     \prob(F_T(M))
+%     =
+%     1-\prod_{t\in S(M)}(1-\tau_t^{\downarrow})
+%     \le
+%     1-\prod_{t\in S(M)}(1-\tau_t).
+%   \end{equation*}
+%   If $\tau_t\in\{0,1/n_t,\dots,(n_t-1)/n_t\}$ for all $t$, then $\tau_t^{\downarrow}=\tau_t$ and the final inequality is an equality.
+% \end{proposition}
+
+% \begin{proof}
+%   Since $p_t$ takes values in $\{1/n_t,2/n_t,\dots,1\}$, the events $\{p_t\le\tau_t\}$ and $\{p_t\le\tau_t^{\downarrow}\}$ coincide for each $t$, hence the masked failure events coincide.
+%   Since $\tau_t^{\downarrow}$ is grid-valued, Proposition~\ref{prop:iid-pvalues} implies $\prob(p_t\le\tau_t^{\downarrow})=\tau_t^{\downarrow}$ and independence across $t$, so
+%   \begin{equation*}
+%     \prob(F_T(M)) = 1-\prod_{t\in S(M)}\prob(p_t>\tau_t^{\downarrow}) = 1-\prod_{t\in S(M)}(1-\tau_t^{\downarrow}).
+%   \end{equation*}
+%   Since $\tau_t^{\downarrow}\le \tau_t$, we have $(1-\tau_t^{\downarrow})\ge (1-\tau_t)$ and the inequality follows.
+% \end{proof}
+
+% \subsection{Window validity as sliding constraints}
+% Fix $T\in\N$, a window length $K\in\{1,\dots,T\}$, and level $\alpha\in(0,1)$.
+% Let $L:=-\log(1-\alpha)$.
+
+% \begin{theorem}[Window mask validity as sliding sums]
+%   \label{thm:window-sliding-sums}
+%   Assume Proposition~\ref{prop:iid-pvalues} and $n_t\equiv n$.
+%   Fix a deterministic schedule $\tau_{1:T}$ with $\tau_{t}\in[0,1)$.
+%   Define $s_{t}:=-\log(1-\tau_{t})$.
+%   Then the sliding constraints
+%   \begin{equation*}
+%     \sum_{t=i}^{i+K-1}s_{t}\le L,\qquad i\in\{1,\dots,T-K+1\},
+%   \end{equation*}
+%   imply
+%   \begin{equation*}
+%     \sup_{M\in\mcal_{0}^{\mathrm{win}}(K)} \prob\bigl(F_{T}(M)\bigr)\le \alpha.
+%   \end{equation*}
+%   If, in addition, $\tau_{t}\in\{0,1/n,\dots,(n-1)/n\}$ for all $t$, then the above implication is an equivalence.
+% \end{theorem}
+
+% \begin{proof}
+%   Fix $i\in\{1,\dots,T-K+1\}$ and let $M^{(i)}$ be the mask that monitors exactly the window $\{i,\dots,i+K-1\}$.
+%   If $\sum_{t=i}^{i+K-1}s_{t}\le L$, then
+%   \begin{equation*}
+%     \prod_{t=i}^{i+K-1}(1-\tau_{t})=\exp\left(-\sum_{t=i}^{i+K-1}s_{t}\right)\ge \exp(-L)=1-\alpha.
+%   \end{equation*}
+%   By Proposition~\ref{prop:off-grid-conservative}, this implies $\prob(F_{T}(M^{(i)}))\le \alpha$.
+%   Taking the maximum over $i$ yields $\sup_{M\in\mcal_{0}^{\mathrm{win}}(K)} \prob(F_{T}(M))\le \alpha$.
+
+%   If $\tau_{t}$ is grid-valued for all $t$, then Proposition~\ref{prop:off-grid-conservative} gives
+%   \begin{equation*}
+%     \prob(F_{T}(M^{(i)})) = 1-\prod_{t=i}^{i+K-1}(1-\tau_{t}).
+%   \end{equation*}
+%   Therefore $\prob(F_{T}(M^{(i)}))\le \alpha$ is equivalent to $\prod_{t=i}^{i+K-1}(1-\tau_{t})\ge 1-\alpha$, which is equivalent to $\sum_{t=i}^{i+K-1}s_{t}\le L$ by the identity $\prod_{t=i}^{i+K-1}(1-\tau_{t})=\exp(-\sum_{t=i}^{i+K-1}s_{t})$.
+%   Taking the maximum over $i$ yields the equivalence.
+% \end{proof}
+
+% \subsection{A convex design class and a min-cost circulation reduction}
+% We consider the window-constrained log-budget formulation
+% \begin{equation}
+%   \begin{aligned}
+%     \min_{s_{1:T}\ge 0}\quad & \sum_{t=1}^{T}\tilde{c}_{t}(s_{t})\\
+%     \text{s.t.}\quad & \sum_{t=i}^{i+K-1}s_{t}\le L,\qquad i\in\{1,\dots,T-K+1\},
+%   \end{aligned}
+%   \label{eq:window-convex-design}
+% \end{equation}
+% where each $\tilde{c}_{t}:[0,\infty)\to\R\cup\{+\infty\}$ is convex.
+
+% \begin{theorem}[Min-cost circulation formulation]
+%   \label{thm:window-flow}
+%   Fix $T\in\N$, $K\in\{1,\dots,T\}$, and $L>0$.
+%   Consider the directed graph with nodes $\{0,1,\dots,T+K-1\}$ and edges of two types:
+%   \begin{equation*}
+%     (j-1)\to j,\qquad j\in\{1,\dots,T+K-1\},
+%   \end{equation*}
+%   and
+%   \begin{equation*}
+%     (t+K-1)\to (t-1),\qquad t\in\{1,\dots,T\}.
+%   \end{equation*}
+%   Impose capacity constraints $0\le f_{j}\le L$ on the forward edges $(j-1)\to j$ for $j\in\{1,\dots,T\}$ and $0\le f_{j}<\infty$ for $j\in\{T+1,\dots,T+K-1\}$.
+%   Impose $0\le s_{t}<\infty$ on the backward edge $(t+K-1)\to (t-1)$ and assign it cost $\tilde{c}_{t}(s_{t})$.
+%   Then the feasible set of circulations on this network is in one-to-one correspondence with the feasible set of \eqref{eq:window-convex-design} via the backward-edge flows $(s_{t})_{t=1}^{T}$.
+%   Under this correspondence, the circulation cost equals $\sum_{t=1}^{T}\tilde{c}_{t}(s_{t})$.
+%   In particular, any minimum-cost circulation yields an optimizer of \eqref{eq:window-convex-design}.
+% \end{theorem}
+
+% \begin{proof}
+%   Fix any nonnegative vector $s_{1:T}$.
+%   Set the backward-edge flows to $s_{t}$.
+%   We show there exists a unique choice of forward-edge flows $(f_{j})_{j=1}^{T+K-1}$ making the resulting flow a circulation, and that the forward capacities are equivalent to the sliding constraints.
+
+%   Let $f_{j}$ denote the flow on edge $(j-1)\to j$.
+%   Flow conservation at node $0$ requires $f_{1}=s_{1}$ because the only outgoing edge is $(0\to 1)$ and the only incoming edge is $(K\to 0)$ with flow $s_{1}$.
+%   For each node $u\in\{1,\dots,T+K-2\}$, conservation yields
+%   \begin{equation*}
+%     f_{u+1} + \ind{u\ge K}s_{u-K+1} = f_{u} + \ind{u\le T-1}s_{u+1},
+%   \end{equation*}
+%   where the indicators select the presence of the corresponding backward edges.
+%   This recursion uniquely determines $(f_{j})$ given $(s_{t})$ and implies $f_{j}\ge 0$ for all $j$.
+%   A direct induction shows that for every $j\in\{1,\dots,T\}$,
+%   \begin{equation*}
+%     f_{j}=\sum_{t=\max\{1,j-K+1\}}^{j}s_{t}.
+%   \end{equation*}
+%   In particular, for each window start $i\in\{1,\dots,T-K+1\}$, taking $j=i+K-1$ gives
+%   \begin{equation*}
+%     f_{i+K-1}=\sum_{t=i}^{i+K-1}s_{t}.
+%   \end{equation*}
+%   Therefore the capacity constraints $f_{j}\le L$ for $j\in\{1,\dots,T\}$ are equivalent to the sliding-window inequalities in \eqref{eq:window-convex-design}.
+%   This proves existence and uniqueness of a feasible circulation for each feasible $s_{1:T}$.
+
+%   Conversely, any feasible circulation induces nonnegative backward-edge flows $s_{1:T}$.
+%   Since the circulation satisfies the same conservation equations, the induced forward flows satisfy the identities above, so the forward capacities imply the sliding-window constraints.
+%   Therefore the backward-edge flows are feasible for \eqref{eq:window-convex-design}.
+
+%   Finally, only backward edges carry nonzero cost, and their costs are exactly $\tilde{c}_{t}(s_{t})$, so the total circulation cost is $\sum_{t=1}^{T}\tilde{c}_{t}(s_{t})$.
+% \end{proof}
+
+% \begin{remark}[Piecewise-linear costs and complexity]
+%   If each $\tilde{c}_{t}$ is piecewise-linear convex on $[0,\infty)$ with finitely many breakpoints, one can split each backward edge into parallel linear-cost edges matching the segment slopes and lengths.
+%   This converts \eqref{eq:window-convex-design} into a min-cost circulation instance with $O(T)$ nodes and $O(T+B)$ edges, where $B$ is the total number of linear pieces.
+%   Such instances are solvable in time polynomial in $T$ and $B$.
+% \end{remark}
+
+\section{Organization of the Appendix}
+
+\section{Proofs}
+\label{app:proofs}
+This appendix collects proofs deferred from the main text.
+
+\appendixproofs
+
+\end{document}

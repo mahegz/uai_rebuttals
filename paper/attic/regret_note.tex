@@ -1,0 +1,827 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage{hyperref}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}{Lemma}[section]
+\newtheorem{corollary}{Corollary}[section]
+\newtheorem*{remark}{Remark}
+
+\newenvironment{assumptions}{%
+  \begingroup
+  \renewcommand{\labelenumi}{\textbf{A\arabic{enumi}}.}%
+  \renewcommand{\theenumi}{A\arabic{enumi}}%
+  \begin{enumerate}
+    }{%
+  \end{enumerate}
+  \endgroup
+}
+
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\1}{\mathbf{1}}
+\newcommand{\ind}[1]{\mathbf{1}\{#1\}}
+\newcommand{\eqdef}{\coloneqq}
+\newcommand{\ens}[1]{\left\{#1\right\}}
+\newcommand{\open}[1]{\left(#1\right)}
+\newcommand{\closed}[1]{\left[#1\right]}
+\newcommand{\modu}[1]{\left|#1\right|}
+\newcommand{\mcal}{\mathcal{M}}
+\newcommand{\scal}{\mathcal{S}}
+\newcommand{\scalt}{\mathcal{S}_{t}}
+\newcommand{\bcal}{\mathcal{B}}
+
+\newcommand{\Mcal}{\mcal}
+\newcommand{\Scal}{\scal}
+\newcommand{\Bcal}{\bcal}
+\newcommand{\argmin}{\operatorname*{argmin}}
+\newcommand{\argmax}{\operatorname*{argmax}}
+\newcommand{\subdiff}{\partial}
+
+\title{Closed-Loop Regret Analysis: Dual Bounds for the All-Ones Mask}
+\author{Working Note}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+  We study closed-loop replanning for allocating a log-budget under mask constraints, where per-time convex costs are revealed sequentially.
+  The main result is a single regret theorem for the replanning policy: regret telescopes into one-step Bellman suboptimalities and is controlled by stage-cost forecast errors and directional errors in the value-function subgradients (dual multipliers).
+  We then specialize the statement to convex versus strongly convex costs, to sliding-window masks of width $K$, and to the single all-ones mask.
+\end{abstract}
+
+\tableofcontents
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Setup}
+\label{sec:setup}%
+
+Fix a horizon $T \in \N$, a mask family $\mcal_{0} \subseteq \{0,1\}^{T}$, a log-budget $L > 0$, and a threshold cap $\tau_{\max} \in (0,1)$.
+Define the log-budget cap $s_{\max} \eqdef -\log({1-\tau_{\max}})$.
+
+\paragraph{Threshold coordinate.}
+At each time $t$ the procedure selects a conformal $p$-value threshold $\tau_t \in [0,\tau_{\max}]$.
+Given per-time costs $c_1,\dots,c_T$ on $[0,\tau_{\max}]$, the offline design problem is
+\begin{equation}
+  \label{eq:offline-tau}
+  \min_{0 \leq \tau_1,\dots,\tau_T \leq \tau_{\max}} \sum_{t=1}^{T} c_t(\tau_t)
+  \quad \text{s.t.} \quad
+  \sum_{t=1}^{T} M_t \bigl(-\log({1-\tau_t})\bigr) \leq L, \qquad \forall M \in \mcal_{0}.
+\end{equation}
+
+\paragraph{Log transformation.}
+Define $s_t \eqdef -\log({1-\tau_t})$, so $s_t \in [0,s_{\max}]$ and $\tau_t = 1-\exp({-s_t})$.
+Defining the transformed costs
+\begin{equation*}
+  \tilde{c}_t(s) \eqdef c_t(1-\exp({-s})),
+  \qquad
+  s \in [0,s_{\max}],
+\end{equation*}
+the problem~\eqref{eq:offline-tau} becomes the convex program with linear mask constraints
+\begin{equation}
+  \label{eq:offline}
+  \min_{0 \leq s_1,\dots,s_T \leq s_{\max}} \sum_{t=1}^{T} \tilde{c}_t(s_t)
+  \quad \text{s.t.} \quad
+  \sum_{t=1}^{T} M_t s_t \leq L, \qquad \forall M \in \mcal_{0}.
+\end{equation}
+
+\paragraph{On $s_{\max}$.}
+If $\tau_t$ is restricted to the discrete grid $\{0,1/n,\dots,(n-1)/n\}$, then $\tau_{\max}=(n-1)/n$ and $s_{\max}=\log({n})$.
+In the remainder we treat $s_{\max}$ as a fixed finite cap.
+
+\paragraph{Closed-loop setting.}
+At each time $t$, before observing the realized cost curve $\tilde{c}_t$, the algorithm selects $s_t$ based on the current state $\mathbf{b}_t$ and the forecasted cost curves.
+Then $\tilde{c}_t$ is revealed and the incurred cost is $\tilde{c}_t(s_t)$.
+Forecasts may be updated over time: we allow the forecast for a future stage $u$ available at time $t$ to differ from the forecast available later.
+Concretely, for each $t \in \{1,\dots,T\}$ and each $u \in \{t,\dots,T\}$, let $\hat{c}_{t,u}$ denote the forecast cost curve for stage $u$ available at time $t$.
+We treat the realized costs and the entire forecast array $(\hat{c}_{t,u})_{1 \leq t \leq u \leq T}$ as fixed functions; all statements are pathwise.
+
+\paragraph{State and value functions.}
+For each mask $M \in \mcal_{0}$, define the remaining budget at time $t$ by
+\begin{equation}
+  \label{eq:budget-state}
+  b_t(M) := L - \sum_{u < t} M_u s_u,
+\end{equation}
+and let $\mathbf{b}_t := (b_t(M))_{M \in \mcal_{0}} \in \R^{|\mcal_{0}|}$, so $\mathbf{b}_1 = L \1$.
+Define the mask-incidence direction at time $t$ as $\mathbf{m}_t := (M_t)_{M \in \mcal_{0}} \in \{0,1\}^{|\mcal_{0}|}$, so the state transition is
+\begin{equation}
+  \label{eq:state-transition}
+  \mathbf{b}_{t+1} = \mathbf{b}_t - s_t \mathbf{m}_t.
+\end{equation}
+
+The one-step feasible set is the interval
+\begin{equation}
+  \label{eq:Scal-def}
+  \scalt(\mathbf{b})
+  := \left[0, \min\left\{s_{\max}, \inf\{b(M) : M \in \mcal_{0},\ M_t = 1\}\right\}\right],
+\end{equation}
+with the convention $\inf\emptyset = +\infty$.
+
+For $t \in \{1,\dots,T\}$ and $\mathbf{b} \in \R_{\geq 0}^{|\mcal_{0}|}$, define the remaining offline value function
+\begin{equation}
+  \label{eq:value-function}
+  V_t(\mathbf{b})
+  := \min_{\substack{0 \leq s_{t:T} \leq s_{\max} \\
+  \sum_{u=t}^{T} M_u s_u \leq b(M),\ \forall M \in \mcal_{0}}}
+  \sum_{u=t}^{T} \tilde{c}_u(s_u),
+\end{equation}
+with terminal condition $V_{T+1}(\cdot) = 0$.
+For each planning time $t$, define the time-$t$ forecasted value functions $(\hat{V}_{u \mid t})_{u=t}^{T+1}$ by replacing $\tilde{c}_v$ with $\hat{c}_{t,v}$ in~\eqref{eq:value-function} for stages $v \geq u$, with terminal condition $\hat{V}_{T+1 \mid t}(\cdot)=0$.
+In particular, at time $t$ the replanning policy uses $\hat{c}_{t,t}$ and $\hat{V}_{t+1 \mid t}$.
+
+Since the objectives are convex and the constraints are linear, each $V_t$ and each $\hat{V}_{u \mid t}$ is a convex function of $\mathbf{b}$ on $\R_{\geq 0}^{|\mcal_{0}|}$ and is coordinatewise nonincreasing in $\mathbf{b}$.
+
+\paragraph{Standing assumptions.}
+\begin{assumptions}
+\item\label{ass:A1} (Realized costs.) There exists $\delta>0$ such that, for each $t \in \{1,\dots,T\}$, the realized cost curve $\tilde{c}_t$ is proper, closed, convex, and finite on an open neighborhood $(-\delta,s_{\max}+\delta)$ (hence continuous on $[0,s_{\max}]$).
+\item\label{ass:A2} (Forecast costs.) There exists $\delta>0$ such that, for each $t \in \{1,\dots,T\}$ and each $u \in \{t,\dots,T\}$, the forecast curve $\hat{c}_{t,u}$ is proper, closed, convex, and finite on an open neighborhood $(-\delta,s_{\max}+\delta)$ (hence continuous on $[0,s_{\max}]$).
+\item\label{ass:A3} (Strong convexity and smoothness.) There exist constants $0 < \mu \leq \beta$ such that, for each $u \in \{1,\dots,T\}$, the realized cost $\tilde{c}_u$ is continuously differentiable on $[0,s_{\max}]$, twice continuously differentiable on $(0,s_{\max})$, and satisfies
+  \begin{equation}
+    \label{eq:mu-beta-assumptions}
+    \mu \leq \tilde{c}_u''(s) \leq \beta
+    \qquad \forall s \in (0,s_{\max}).
+  \end{equation}
+  Moreover, each forecast curve $\hat{c}_{t,u}$ (for all $1 \leq t \leq u \leq T$) is continuously differentiable on $[0,s_{\max}]$, twice continuously differentiable on $(0,s_{\max})$, and satisfies the same bounds $\mu \leq \hat{c}_{t,u}''(s) \leq \beta$ for all $s \in (0,s_{\max})$. In particular, the derivatives $\tilde{c}_u'$ and $\hat{c}_{t,u}'$ are $\beta$-Lipschitz on $(0,s_{\max})$.
+\item\label{ass:A4} (All-ones-mask binding and interiority.)
+  For the all-ones mask case in Section~\ref{sec:all-ones-mask}, we assume the \emph{binding regime} holds pathwise:
+  along the realized trajectory generated by the replanning policy, for every $t \in \{1,\dots,T-1\}$, the remaining budget is strictly positive ($b_{t+1} > 0$) and the tail budget constraint is active for both the true and forecasted tail optima,
+  i.e. $\sum_{u=t+1}^{T} s_u^{\star}(b_{t+1})=b_{t+1}$ and $\sum_{u=t+1}^{T} \hat{s}_u(b_{t+1})=b_{t+1}$ (where $\hat{s}_u$ is the forecasted tail allocation produced at time $t$).
+
+  For the average-error bound in Section~\ref{sec:all-ones-mask}, we additionally assume a \emph{pathwise interiority} condition:
+  along the realized trajectory, the optimal tail allocations are strictly interior, satisfying $s_u^{\star}(b_{t+1}) \in (0, s_{\max})$ and $\hat{s}_u(b_{t+1}) \in (0, s_{\max})$ for all $u \in \{t+1,\dots,T\}$.
+  This naturally holds if the costs are sufficiently homogeneous such that the budget is strictly spread across all available tail stages.
+\item\label{ass:A5} (Tail-interiority along the realized trajectory.)
+  Along the realized trajectory generated by the replanning policy~\eqref{eq:replan-action}, the state remains tail-interior: for every $t \in \{1,\dots,T\}$ we have $\mathbf{b}_t \in \bcal_t^\circ$.
+\end{assumptions}
+
+\paragraph{Replanning policy.}
+At each time $t$, the replanning policy selects
+\begin{equation}
+  \label{eq:replan-action}
+  s_t \in \argmin_{s \in \scalt(\mathbf{b}_t)}
+  \left[\hat{c}_{t,t}(s) + \hat{V}_{t+1 \mid t}(\mathbf{b}_t - s \mathbf{m}_t)\right],
+\end{equation}
+and updates $\mathbf{b}_{t+1} = \mathbf{b}_t - s_t \mathbf{m}_t$.
+Let $s_t^{\star} \in \argmin_{s \in \scalt(\mathbf{b}_t)} [\tilde{c}_t(s) + V_{t+1}(\mathbf{b}_t - s \mathbf{m}_t)]$ denote any Bellman-optimal action for the true costs.
+
+\paragraph{A raw derivative error metric.}
+Under Assumption~\ref{ass:A3}, define the raw derivative forecast error
+\begin{equation}
+  \label{eq:raw-error}
+  e_{t,u} \eqdef \sup_{s \in [0,s_{\max}]} |\tilde{c}_u'(s) - \hat{c}_{t,u}'(s)|,
+  \qquad 1 \leq t \leq u \leq T.
+\end{equation}
+Write $\kappa \eqdef \beta/\mu$.
+
+\subsection{Duality and dual variables}
+\label{subsec:duality}
+
+We develop the Lagrangian dual theory for the tail programs~\eqref{eq:value-function}.
+Crucially, we employ a \emph{restricted dualization}: we only dualize the linear mask constraints, while keeping the box constraints $0 \leq s_u \leq s_{\max}$ within the primal domain.
+We first introduce the Lagrangian and the dual problem over this restricted box, then state the regularity conditions under which Slater's condition ensures strong duality.
+Finally, we apply generalized Danskin's theorem to characterize the value-function subgradients, and invoke the Karush-Kuhn-Tucker (KKT) conditions to relate dual multipliers to stage-cost derivatives under interiority.
+
+%--- Step 1: Definitions ---------------------------------------------------
+
+\paragraph{Dual cone.}
+Fix $t \in \{1,\dots,T\}$.
+A mask $M \in \mcal_{0}$ is \emph{active in the tail} if $\sum_{u=t}^{T} M_u > 0$;
+otherwise the constraint $\sum_{u=t}^{T} M_u s_u \leq b(M)$ is trivially satisfied and carries no dual variable.
+Define the admissible multiplier cone
+\begin{equation*}
+  \Lambda_t
+  \eqdef
+  \left\{\boldsymbol{\lambda} \in \R_{\geq 0}^{|\mcal_{0}|}
+  : \lambda(M) = 0 \ \text{whenever}\ \sum_{u=t}^{T} M_u = 0\right\}.
+\end{equation*}
+
+\paragraph{Tail Lagrangian.}
+Let $\mathbf{s} = (s_t, \dots, s_T)^\top$ denote the vector of tail decisions.
+Let $\mathbf{M}_{t:T}$ be the matrix with rows $(M_t, \dots, M_T)$ for each $M \in \mcal_{0}$.
+For $\mathbf{b} \in \R_{\geq 0}^{|\mcal_{0}|}$ and $\boldsymbol{\lambda} \in \Lambda_t$, the tail Lagrangian is
+\begin{equation*}
+  \mathcal{L}_t(\mathbf{s},\boldsymbol{\lambda};\mathbf{b})
+  \eqdef
+  \sum_{u=t}^{T} \tilde{c}_u(s_u)
+  + \boldsymbol{\lambda}^\top (\mathbf{M}_{t:T} \mathbf{s} - \mathbf{b}),
+  \qquad \mathbf{s} \in [0,s_{\max}]^{T-t+1}.
+\end{equation*}
+
+\paragraph{Dual function.}
+Define the dual function by minimizing the Lagrangian over the box:
+\begin{equation*}
+  \mathcal{D}_t(\boldsymbol{\lambda};\mathbf{b})
+  \eqdef
+  \inf_{s_{t:T}\in[0,s_{\max}]^{T-t+1}}
+  \mathcal{L}_t(s_{t:T},\boldsymbol{\lambda};\mathbf{b}).
+\end{equation*}
+Note that the infimum is taken over the compact box $[0,s_{\max}]^{T-t+1}$; no extended-value conventions are needed.
+
+\paragraph{Dual-optimal set.}
+Define the set of dual optima
+\begin{equation*}
+  D_t(\mathbf{b})
+  \eqdef
+  \argmax_{\boldsymbol{\lambda} \in \Lambda_t}
+  \mathcal{D}_t(\boldsymbol{\lambda};\mathbf{b}).
+\end{equation*}
+
+%--- Step 2: Regularity ----------------------------------------------------
+
+\paragraph{Tail-interior budget region and Slater's condition.}
+Slater's condition ensures strong duality for a convex problem if there exists a strictly feasible point.
+The duality results below require every active mask constraint to carry a strictly positive remaining budget.
+Define the \emph{tail-interior budget region}
+\begin{equation*}
+  \bcal_t^\circ
+  \eqdef
+  \left\{\mathbf{b} \in [0,L]^{|\mcal_{0}|}
+  : b(M) > 0 \ \text{whenever}\ \sum_{u=t}^{T} M_u > 0\right\}.
+\end{equation*}
+That is, $\mathbf{b} \in \bcal_t^\circ$ if and only if every mask that is active in the tail has strictly positive remaining budget. This definition allows us to gracefully guarantee a strictly feasible point to claim strong duality.
+
+%--- Step 3: Lemma 1 (Existence & Strong Duality) --------------------------
+
+\begin{lemma}[Existence and strong duality]
+  \label{lem:slater-attainment}
+  Assume Assumption~\ref{ass:A1}.
+  Fix $t \in \{1,\dots,T\}$ and $\mathbf{b} \in \bcal_t^\circ$.
+  Then:
+  \begin{enumerate}
+    \item Slater's condition holds for the tail program~\eqref{eq:value-function}: there exists a strictly feasible point in the box bounds where mask constraints are strictly satisfied.
+    \item Strong duality holds:
+      $V_t(\mathbf{b})
+      = \max_{\boldsymbol{\lambda}\in\Lambda_t}
+      \mathcal{D}_t(\boldsymbol{\lambda};\mathbf{b})$.
+    \item The dual optimum is attained: $D_t(\mathbf{b}) \neq \emptyset$.
+  \end{enumerate}
+
+  Under Assumption~\ref{ass:A2}, the same statements hold for each forecasted tail program defining $\hat{V}_{u \mid t}(\mathbf{b})$ whenever $\mathbf{b} \in \bcal_u^\circ$.
+\end{lemma}
+
+\begin{proof}
+  \emph{Primal attainment.}
+  The feasible set is a closed subset of the compact box $[0,s_{\max}]^{T-t+1}$, hence compact.
+  The objective is continuous and convex on the box by Assumption~\ref{ass:A1}.
+  Therefore a primal minimizer exists.
+
+  \emph{Slater's condition.}
+  Since $\mathbf{b} \in \bcal_t^\circ$, every active mask satisfies $b(M)>0$.
+  Let
+  \begin{equation*}
+    \epsilon
+    \eqdef
+    \min\left\{\frac{s_{\max}}{2},\
+      \min_{\substack{M \in \mcal_{0}:\\[2pt] \sum_{u=t}^{T} M_u>0}}
+    \frac{b(M)}{2\sum_{u=t}^{T} M_u}\right\}
+    > 0,
+  \end{equation*}
+  and set $s_u \eqdef \epsilon$ for all $u \in \{t,\dots,T\}$.
+  Then $s_u \in (0,s_{\max})$ and, for every active mask,
+  \begin{equation*}
+    \sum_{u=t}^{T} M_u s_u
+    = \epsilon \sum_{u=t}^{T} M_u < b(M).
+  \end{equation*}
+  Hence a strictly feasible point exists.
+
+  \emph{Strong duality and dual attainment.}
+  The tail program is a convex program with linear inequality constraints and a compact feasible set; Slater's condition therefore implies strong duality (zero duality gap).
+  For each fixed $\mathbf{s}$, the map $\boldsymbol{\lambda} \mapsto \mathcal{L}_t(\mathbf{s},\boldsymbol{\lambda};\mathbf{b})$ is continuous affine. As the pointwise infimum of continuous affine functions over the compact set $[0,s_{\max}]^{T-t+1}$, the dual function $\mathcal{D}_t(\boldsymbol{\lambda};\mathbf{b})$ is a concave, upper semicontinuous (usc) function.
+  Moreover, since $b(M)>0$ for every active mask, taking $\mathbf{s} \equiv 0$ implies there exists a constant $C_0$ such that
+  $\mathcal{D}_t(\boldsymbol{\lambda};\mathbf{b}) \leq C_0 - \boldsymbol{\lambda}\cdot\mathbf{b}$
+  for all $\boldsymbol{\lambda} \in \Lambda_t$. This implies $\mathcal{D}_t(\boldsymbol{\lambda};\mathbf{b}) \to -\infty$ as $\|\boldsymbol{\lambda}\|\to\infty$ in $\Lambda_t$.
+  Since $\mathcal{D}_t$ is upper semicontinuous and coercive, it attains its maximum on some compact level set, and the maximizers form a nonempty compact set. \qedhere
+\end{proof}
+
+%--- Step 3: KKT Conditions ------------------------------------------------
+
+\paragraph{KKT conditions and interior solutions.}
+Under strong duality, any optimal sequence $\mathbf{s}^\star$ for the tail program and an optimal dual multiplier vector $\boldsymbol{\lambda}^\star \in D_t(\mathbf{b})$ must satisfy the Karush-Kuhn-Tucker (KKT) conditions.
+
+Specifically, assuming continuous differentiability of the stage-costs (Assumption~\ref{ass:A3}), the stationarity condition combined with complementary slackness for the box constraints $0 \leq s_u \leq s_{\max}$ implies that if an optimal coordinate $s_u^\star$ lies strictly in the interior of its bounds ($0 < s_u^\star < s_{\max}$), the multipliers for the box bounds must be exactly zero.
+In this regime, the relationship simplifies to equating the unconstrained derivative with the active dual multipliers:
+\begin{equation*}
+  \tilde{c}_u'(s_u^\star) = - \sum_{M \in \mcal_0} M_u \lambda^\star(M).
+\end{equation*}
+We rely precisely on this interiority simplification when bounding multiplier errors.
+
+%--- Step 4: Lemma 2 (Danskin / Subgradients) ------------------------------
+
+\paragraph{Value-function subgradients via Danskin's theorem.}
+Generalized Danskin's theorem characterizes the subdifferential of a value function evaluated as a maximum over a compact set. We apply it natively to relate the subgradients of our remaining value function $V_t$ directly to the established dual-optimal sets representing marginal constraint values.
+
+\begin{lemma}[Dual multipliers and value-function subgradients]
+  \label{lem:dual-subgrad}%
+  Fix $t \in \{1,\dots,T\}$ and $\mathbf{b} \in \bcal_t^\circ$.
+  Then
+  \begin{equation*}
+    \subdiff V_t(\mathbf{b})
+    = \mathrm{conv}\{-\boldsymbol{\lambda} : \boldsymbol{\lambda} \in D_t(\mathbf{b})\}
+    = \{-\boldsymbol{\lambda} : \boldsymbol{\lambda} \in D_t(\mathbf{b})\}.
+  \end{equation*}
+  The same statement holds for each forecasted value function $\hat{V}_{u \mid t}$ on $\bcal_u^\circ$, with $\tilde{c}_v$ replaced by $\hat{c}_{t,v}$ for $v \geq u$.
+\end{lemma}
+
+\begin{proof}
+  By Lemma~\ref{lem:slater-attainment}, strong duality holds at $\mathbf{b}$ and the dual maximum is attained on the compact set $D_t(\mathbf{b})$.
+  For fixed $\boldsymbol{\lambda}$, the map
+  $\mathbf{b} \mapsto \mathcal{D}_t(\boldsymbol{\lambda};\mathbf{b})$
+  is affine with gradient $-\boldsymbol{\lambda}$.
+  Since the maximum of $\mathcal{D}_t(\cdot;\mathbf{b})$ over $\Lambda_t$ is attained on a compact set and the dual function is affine in $\mathbf{b}$, Danskin's theorem directly gives the subdifferential:
+  \begin{equation*}
+    \subdiff V_t(\mathbf{b})
+    = \mathrm{conv}\{-\boldsymbol{\lambda} : \boldsymbol{\lambda} \in D_t(\mathbf{b})\}.
+  \end{equation*}
+  Since $D_t(\mathbf{b})$ is convex (as the argmax of a concave function over a convex set), its image under $\boldsymbol{\lambda}\mapsto -\boldsymbol{\lambda}$ is convex, so the convex hull reduces to the set itself. \qedhere
+\end{proof}
+
+\subsection{Error quantities}
+\label{subsec:errors}
+
+Define the stage-cost subgradient error
+\begin{equation}
+  \label{eq:eta-t}
+  \eta_t(s)
+  := \sup_{\substack{\hat{g}_c \in \subdiff \hat{c}_{t,t}(s) \\ g_c \in \subdiff \tilde{c}_t(s)}}
+  |\hat{g}_c - g_c|,
+  \qquad s \in [0,s_{\max}],
+\end{equation}
+and let $\eta_t := \sup_{s \in [0,s_{\max}]} \eta_t(s)$.
+By Assumptions~\ref{ass:A1} and~\ref{ass:A2}, both subdifferentials are nonempty on $[0,s_{\max}]$ and, since each cost is finite on an open neighborhood of $[0,s_{\max}]$, the subdifferentials are uniformly bounded on $[0,s_{\max}]$, hence $\eta_t$ is finite.
+
+For $\mathbf{b} \in \bcal_{t+1}^\circ$, define the forecasted dual-optimal set
+$\hat{D}_{t+1 \mid t}(\mathbf{b}) \eqdef \argmax_{\boldsymbol{\lambda} \in \Lambda_{t+1}} \hat{\mathcal{D}}_{t+1 \mid t}(\boldsymbol{\lambda};\mathbf{b})$,
+where $\hat{\mathcal{D}}_{t+1 \mid t}$ is the dual function with $\tilde{c}_u$ replaced by $\hat{c}_{t,u}$ for $u \geq t+1$.
+By Lemma~\ref{lem:slater-attainment}, both $D_{t+1}(\mathbf{b})$ and $\hat{D}_{t+1 \mid t}(\mathbf{b})$ are nonempty.
+Define the directional dual-multiplier error
+\begin{equation}
+  \label{eq:epsilon-t}
+  \epsilon_t(\mathbf{b})
+  := \sup_{\substack{\hat{\boldsymbol{\lambda}} \in \hat{D}_{t+1 \mid t}(\mathbf{b})\\ \boldsymbol{\lambda} \in D_{t+1}(\mathbf{b})}}
+  \left|(\hat{\boldsymbol{\lambda}}-\boldsymbol{\lambda})\cdot\mathbf{m}_t\right|,
+  \qquad \mathbf{b} \in \bcal_{t+1}^\circ,
+\end{equation}
+and let $\epsilon_t \eqdef \sup_{\mathbf{b} \in \bcal_{t+1}^\circ} \epsilon_t(\mathbf{b})$.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{A single regret theorem}
+\label{sec:regret}%
+
+\begin{theorem}[Closed-loop regret bound]
+  \label{thm:main}%
+  Assume Assumptions~\ref{ass:A1},~\ref{ass:A2}, and~\ref{ass:A5}.
+  The regret of the replanning policy~\eqref{eq:replan-action} satisfies the exact decomposition
+  \begin{equation*}
+    \mathrm{Regret}
+    \eqdef \sum_{t=1}^{T} \tilde{c}_t(s_t) - V_1(L\1)
+    = \sum_{t=1}^{T} \delta_t,
+  \end{equation*}
+  where $\delta_t \eqdef \tilde{c}_t(s_t) + V_{t+1}(\mathbf{b}_{t+1}) - V_t(\mathbf{b}_t)$ is the one-step Bellman suboptimality, and the one-step bound
+  \begin{equation*}
+    0 \leq \delta_t \leq \left(\epsilon_t(\mathbf{b}_{t+1}) + \eta_t(s_t)\right)|s_t - s_t^{\star}|
+    \leq (\epsilon_t + \eta_t)|s_t - s_t^{\star}|.
+  \end{equation*}
+
+  Under Assumption~\ref{ass:A3}, $|s_t - s_t^{\star}| \leq (\epsilon_t + \eta_t)/\mu$ and
+  \begin{equation*}
+    \mathrm{Regret} \leq \frac{1}{2\mu} \sum_{t=1}^{T} (\epsilon_t + \eta_t)^{2}.
+  \end{equation*}
+\end{theorem}
+
+\begin{proof}
+  We first justify the one-step feasible set~\eqref{eq:Scal-def}.
+  Fix $t$ and $\mathbf{b} \geq 0$ coordinatewise.
+  If $0 \leq s \leq \min\{s_{\max}, \inf\{b(M) : M \in \mcal_{0},\ M_t = 1\}\}$, then for every mask $M$ with $M_t = 1$ we have $s \leq b(M)$ and for every mask with $M_t = 0$ we have $M_t s = 0 \leq b(M)$.
+  Choosing the completion $s_{t+1} = \cdots = s_T = 0$ therefore satisfies the remaining constraints.
+  Conversely, if $s > \min\{s_{\max}, \inf\{b(M) : M \in \mcal_{0},\ M_t = 1\}\}$, then either $s > s_{\max}$ or there exists $M$ with $M_t = 1$ and $b(M) < s$, and in both cases feasibility fails because for any completion with $s_{t+1:T} \geq 0$,
+  \begin{equation*}
+    \sum_{u=t}^{T} M_u s_u \geq M_t s = s > b(M).
+  \end{equation*}
+
+  \paragraph{Step 1 (Bellman recursion and telescoping).}
+  Define the one-step cost-to-go
+  \begin{equation*}
+    h_t(s;\mathbf{b}) := \tilde{c}_t(s) + V_{t+1}(\mathbf{b} - s \mathbf{m}_t).
+  \end{equation*}
+  A standard splitting-and-minimizing argument shows that for every $\mathbf{b} \geq 0$,
+  \begin{equation}
+    \label{eq:bellman}
+    V_t(\mathbf{b}) = \min_{s \in \scalt(\mathbf{b})} h_t(s;\mathbf{b}).
+  \end{equation}
+  By~\eqref{eq:bellman}, $V_t(\mathbf{b}_t) = \min_{s \in \scalt(\mathbf{b}_t)} h_t(s;\mathbf{b}_t) = h_t(s_t^{\star};\mathbf{b}_t)$.
+  Since $\mathbf{b}_{t+1} = \mathbf{b}_t - s_t \mathbf{m}_t$, the Bellman suboptimality can be rewritten as
+  \begin{equation*}
+    \delta_t = h_t(s_t;\mathbf{b}_t) - \min_{s \in \scalt(\mathbf{b}_t)} h_t(s;\mathbf{b}_t) \geq 0.
+  \end{equation*}
+  Summing the definition of $\delta_t$ from $t=1$ to $T$ yields
+  \begin{equation*}
+    \sum_{t=1}^{T} \delta_t
+    = \sum_{t=1}^{T} \tilde{c}_t(s_t) + \sum_{t=1}^{T}\left[V_{t+1}(\mathbf{b}_{t+1}) - V_t(\mathbf{b}_t)\right]
+    = \sum_{t=1}^{T} \tilde{c}_t(s_t) - V_1(L\1),
+  \end{equation*}
+  since $V_{T+1}(\cdot)=0$ and $\mathbf{b}_1=L\1$.
+
+  \paragraph{Step 2 (one-step bound and strong-convexity refinement).}
+  Fix $t$.
+  Write $\hat{h}_t(s;\mathbf{b}) := \hat{c}_{t,t}(s) + \hat{V}_{t+1 \mid t}(\mathbf{b} - s \mathbf{m}_t)$ for the forecasted cost-to-go.
+  Because $\hat{c}_{t,t}$ is continuous everywhere on the interval (Assumption~\ref{ass:A2}) and the state transition is linear, we can invoke the subdifferential sum rule and the affine chain rule. Evaluated at $s_t$, every $\hat{g} \in \subdiff \hat{h}_t(s_t;\mathbf{b}_t)$ decomposes as
+  \begin{equation*}
+    \hat{g} = \hat{g}_c - \hat{g}_V \cdot \mathbf{m}_t,
+    \qquad
+    \hat{g}_c \in \subdiff \hat{c}_{t,t}(s_t),
+    \qquad
+    \hat{g}_V \in \subdiff \hat{V}_{t+1 \mid t}(\mathbf{b}_{t+1}),
+  \end{equation*}
+  and likewise $g = g_c - g_V \cdot \mathbf{m}_t \in \subdiff h_t(s_t;\mathbf{b}_t)$ for any $g_c \in \subdiff \tilde{c}_t(s_t)$, $g_V \in \subdiff V_{t+1}(\mathbf{b}_{t+1})$.
+  Since $s_t$ minimizes $\hat{h}_t(\cdot;\mathbf{b}_t)$ over the interval $\scalt(\mathbf{b}_t)$, the normal cone optimality condition implies $0 \in \subdiff \hat{h}_t(s_t;\mathbf{b}_t) + \mathcal{N}_{\scalt(\mathbf{b}_t)}(s_t)$.
+  Thus, there exists $\hat{g} \in \subdiff \hat{h}_t(s_t;\mathbf{b}_t)$ such that $\hat{g}(s_t^{\star}-s_t) \geq 0$ for any feasible point $s_t^{\star} \in \scalt(\mathbf{b}_t)$, i.e.\ $\hat{g}(s_t - s_t^{\star}) \leq 0$.
+  Combining the subgradient inequality $h_t(s_t^{\star};\mathbf{b}_t) \geq h_t(s_t;\mathbf{b}_t) + g(s_t^{\star}-s_t)$ with $\delta_t = h_t(s_t;\mathbf{b}_t) - h_t(s_t^{\star};\mathbf{b}_t)$ gives
+  \begin{equation}
+    \label{eq:one-step-chain}
+    \delta_t
+    \leq g(s_t - s_t^{\star})
+    = \underbrace{(g - \hat{g})(s_t - s_t^{\star})}_{\leq |g-\hat{g}| \cdot |s_t - s_t^{\star}|}
+    + \underbrace{\hat{g}(s_t - s_t^{\star})}_{\leq 0}
+    \leq \bigl(\eta_t(s_t) + \epsilon_t(\mathbf{b}_{t+1})\bigr)|s_t - s_t^{\star}|,
+  \end{equation}
+  where the last inequality uses $|g-\hat{g}| \leq |\hat{g}_c-g_c| + |(\hat{g}_V-g_V)\cdot\mathbf{m}_t|$ and, by Assumption~\ref{ass:A5}, $\mathbf{b}_{t+1} \in \bcal_{t+1}^\circ$, Lemma~\ref{lem:dual-subgrad} implies $\subdiff V_{t+1}(\mathbf{b}_{t+1})=-D_{t+1}(\mathbf{b}_{t+1})$ and $\subdiff \hat{V}_{t+1 \mid t}(\mathbf{b}_{t+1})=-\hat{D}_{t+1 \mid t}(\mathbf{b}_{t+1})$, so $|(\hat{g}_V-g_V)\cdot\mathbf{m}_t| \leq \epsilon_t(\mathbf{b}_{t+1})$.
+
+  Now assume each $\tilde{c}_t$ is $\mu$-strongly convex on $[0,s_{\max}]$.
+  Then $h_t(\cdot;\mathbf{b}_t)$ is $\mu$-strongly convex on $\scalt(\mathbf{b}_t)$.
+  By $\mu$-strong convexity, for any $g \in \subdiff h_t(s_t;\mathbf{b}_t)$,
+  \begin{equation*}
+    h_t(s_t^{\star};\mathbf{b}_t)
+    \geq
+    h_t(s_t;\mathbf{b}_t) + g(s_t^{\star}-s_t) + \frac{\mu}{2}(s_t-s_t^{\star})^2,
+  \end{equation*}
+  hence
+  \begin{equation*}
+    \delta_t
+    = h_t(s_t;\mathbf{b}_t)-h_t(s_t^{\star};\mathbf{b}_t)
+    \leq g(s_t-s_t^{\star}) - \frac{\mu}{2}(s_t-s_t^{\star})^2.
+  \end{equation*}
+  Using $g=\hat{g}+(g-\hat{g})$ and $\hat{g}(s_t-s_t^{\star}) \leq 0$ as above gives
+  \begin{equation*}
+    \delta_t
+    \leq |g-\hat{g}| \cdot |s_t-s_t^{\star}| - \frac{\mu}{2}|s_t-s_t^{\star}|^2.
+  \end{equation*}
+  Let $A_t \eqdef |g-\hat{g}| \leq \eta_t(s_t)+\epsilon_t(\mathbf{b}_{t+1})$.
+  Maximizing the quadratic upper bound over $d \eqdef |s_t-s_t^{\star}| \geq 0$ yields
+  \begin{equation*}
+    \delta_t \leq \frac{A_t^2}{2\mu}
+    \leq \frac{1}{2\mu}\bigl(\eta_t(s_t)+\epsilon_t(\mathbf{b}_{t+1})\bigr)^2
+    \leq \frac{1}{2\mu}(\epsilon_t+\eta_t)^2.
+  \end{equation*}
+  The same maximization gives $|s_t-s_t^{\star}| \leq A_t/\mu \leq (\eta_t(s_t)+\epsilon_t(\mathbf{b}_{t+1}))/\mu$.
+  Summing over $t$ and using the telescoping identity yields the stated regret bound.
+\end{proof}
+
+\section{The all-ones mask}
+\label{sec:all-ones-mask}%
+
+\begin{remark}[The all-ones mask]
+  \label{rem:all-ones-mask}%
+  When $\mcal_{0} = \{\1\}$ consists of a single mask with $M_t = 1$ for all $t$,
+  the constraint in~\eqref{eq:offline} reduces to $\sum_{t=1}^{T} s_t \leq L$, the state is scalar $b_t := L - \sum_{u < t} s_u$, and
+  \begin{equation*}
+    \scalt(b_t) = [0, \min\{b_t, s_{\max}\}].
+  \end{equation*}
+  The value functions depend only on the scalar budget $b$, and $\mathbf{m}_t = 1$, so the directional dual-multiplier error~\eqref{eq:epsilon-t} reduces to the scalar subgradient discrepancy
+  \begin{equation*}
+    \epsilon_t(b) = \sup_{\substack{\hat{g} \in \subdiff \hat{V}_{t+1 \mid t}(b) \\ g \in \subdiff V_{t+1}(b)}} |\hat{g} - g|.
+  \end{equation*}
+\end{remark}
+
+% Bounding the directional multiplier error.
+We work under Assumptions~\ref{ass:A3} and~\ref{ass:A4} with $\mcal_{0}=\{\1\}$.
+Fix time $t \in \{1,\dots,T-1\}$ and let $b := b_{t+1} \in (0, L]$ be the remaining scalar budget evaluated on the realized trajectory.
+Write $N := T-t$.
+
+The scalar tail programs are
+\begin{equation*}
+  V_{t+1}(b)
+  :=
+  \min_{\substack{0 \leq s_{t+1:T} \leq s_{\max} \\
+  \sum_{u=t+1}^{T} s_u \leq b}}
+  \sum_{u=t+1}^{T} \tilde{c}_u(s_u),
+  \qquad
+  \hat{V}_{t+1 \mid t}(b)
+  :=
+  \min_{\substack{0 \leq s_{t+1:T} \leq s_{\max} \\
+  \sum_{u=t+1}^{T} s_u \leq b}}
+  \sum_{u=t+1}^{T} \hat{c}_{t,u}(s_u).
+\end{equation*}
+For $\lambda \geq 0$ and $u \in \{1,\dots,T\}$ define the \emph{coordinate response maps}
+\begin{equation*}
+  \psi_u(\lambda) := \argmin_{s \in [0,s_{\max}]} \left(\tilde{c}_u(s) + \lambda s\right),
+  \qquad
+  \hat{\psi}_{t,u}(\lambda) := \argmin_{s \in [0,s_{\max}]} \left(\hat{c}_{t,u}(s) + \lambda s\right),
+\end{equation*}
+which are well-defined singletons by strict convexity.
+Define the aggregate tail allocations
+\begin{equation*}
+  \phi(\lambda) := \sum_{u=t+1}^{T} \psi_u(\lambda),
+  \qquad
+  \varphi(\lambda) := \sum_{u=t+1}^{T} \hat{\psi}_{t,u}(\lambda).
+\end{equation*}
+Under Assumption~\ref{ass:A3} (strict convexity) and Assumption~\ref{ass:A4} (pathwise interiority), the scalar dual-optimal sets are singletons:
+$D_{t+1}(b) = \{\lambda(b)\}$ and $\hat{D}_{t+1 \mid t}(b) = \{\hat{\lambda}(b)\}$.
+
+\begin{theorem}[Multiplier error bound for the all-ones mask]
+  \label{thm:epsilon-all-ones}%
+  Under Assumptions~\ref{ass:A1}--\ref{ass:A3} and~\ref{ass:A4} with $\mcal_{0}=\{\1\}$ and for $t \in \{1,\dots,T-1\}$,
+  \begin{equation}
+    \label{eq:epsilon-all-ones}
+    \epsilon_t(b)
+    = |\lambda(b)-\hat{\lambda}(b)|
+    \leq \kappa \bar{e}_{t,>t},
+    \qquad
+    \bar{e}_{t,>t} := \frac{1}{T-t}\sum_{u=t+1}^{T} e_{t,u}.
+  \end{equation}
+\end{theorem}
+
+\begin{proof}[Proof (all-ones case)]
+  Fix $t \in \{1,\dots,T-1\}$ and write $N := T-t$.
+
+  \paragraph{Step 1 (strong duality, uniqueness, and scalar subgradients).}
+  Since $b>0$, the point $s_u := \min\{s_{\max}/2,\,b/(2N)\}$ is strictly feasible for both tail problems, so Slater's condition holds.
+  Therefore strong duality holds and the dual maxima are attained for both $V_{t+1}(b)$ and $\hat{V}_{t+1 \mid t}(b)$.
+  Under Assumption~\ref{ass:A3}, each tail objective is strictly convex and the feasible set is compact, so the primal optima are unique vectors $s^{\star}_{t+1:T}$ and $\hat{s}_{t+1:T}$.
+  Under Assumption~\ref{ass:A4} (interiority and binding), the budget equality constraint binds while the box constraints are strictly loose. This renders the active constraints linearly independent, meaning the corresponding dual multipliers $\lambda(b)$ and $\hat{\lambda}(b)$ are uniquely determined singletons.
+
+  For the scalar value functions, Danskin's theorem yields
+  \begin{equation*}
+    \partial V_{t+1}(b) = \{-\lambda(b)\},
+    \qquad
+    \partial \hat{V}_{t+1\mid t}(b) = \{-\hat{\lambda}(b)\},
+  \end{equation*}
+  hence $\epsilon_t(b)=|\lambda(b)-\hat{\lambda}(b)|$.
+
+  \paragraph{Step 2 (KKT conditions and Mean Value Theorem).}
+  The true optimal tail allocation $s^{\star}$ solves the constrained convex program $\min \sum_{u=t+1}^T \tilde{c}_u(s_u)$ subject to $\sum_{u=t+1}^T s_u = b$ and $0 \leq s_u \leq s_{\max}$.
+  By Assumption~\ref{ass:A4} (pathwise interiority), $s_u^{\star}$ lies strictly in the open interval $(0, s_{\max})$ for all $u \in \{t+1,\dots,T\}$.
+  Thus, by the Karush-Kuhn-Tucker (KKT) conditions and complementary slackness for the box bounds, the boundary multipliers vanish.
+  The first-order stationarity condition then holds with exact equality against the unique dual multiplier $\lambda(b) \in \R$ for the budget equality constraint:
+  \begin{equation}
+    \label{eq:kkt_simplified}
+    \tilde{c}_u'(s_u^{\star}) = -\lambda(b).
+  \end{equation}
+  An identical KKT argument applies to the forecasted optimum $\hat{s}_u \in (0, s_{\max})$ with its unique dual multiplier $\hat{\lambda}(b)$, yielding $\hat{c}_{t,u}'(\hat{s}_u) = -\hat{\lambda}(b)$.
+  Define the local partial derivative error $\delta_u := \tilde{c}_u'(\hat{s}_u) - \hat{c}_{t,u}'(\hat{s}_u)$. Notice that $|\delta_u| \leq e_{t,u}$.
+  We rewrite the true cost gradient at the forecasted optimum $\hat{s}_u$ as:
+  \begin{equation*}
+    \tilde{c}_u'(\hat{s}_u) = \hat{c}_{t,u}'(\hat{s}_u) + \delta_u = -\hat{\lambda}(b) + \delta_u.
+  \end{equation*}
+
+  By Assumption~\ref{ass:A3}, $\tilde{c}_u'$ is continuously differentiable on the open interval $(0, s_{\max})$. Because both evaluation points lie within this interval, we can directly apply the Mean Value Theorem between $s_u^{\star}$ and $\hat{s}_u$.
+  There exists some $\xi_u$ between them such that
+  \begin{equation*}
+    \tilde{c}_u'(\hat{s}_u) - \tilde{c}_u'(s_u^{\star}) = \tilde{c}_u''(\xi_u)(\hat{s}_u - s_u^{\star}).
+  \end{equation*}
+  Substituting the derived exact gradients yields:
+  \begin{equation*}
+    (-\hat{\lambda}(b) + \delta_u) - (-\lambda(b)) = H_u (\hat{s}_u - s_u^{\star}), \qquad \text{where } H_u := \tilde{c}_u''(\xi_u).
+  \end{equation*}
+  By Assumption~\ref{ass:A3}'s strong convexity blocks, we know $\mu \leq H_u \leq \beta$.
+  Rearranging for the coordinate allocation difference gives:
+  \begin{equation}
+    \label{eq:mvt-coordinate-diff}
+    \hat{s}_u - s_u^{\star} = \frac{1}{H_u} (\lambda(b) - \hat{\lambda}(b) + \delta_u).
+  \end{equation}
+
+  \paragraph{Step 3 (Aggregating bounded errors).}
+  We sum equation~\eqref{eq:mvt-coordinate-diff} over all tail coordinates $u \in \{t+1,\dots,T\}$.
+  By the binding regime in Assumption~\ref{ass:A4}, both optima sum identically to the remaining tail budget $b$, enforcing $\sum_u (\hat{s}_u - s_u^{\star}) = b - b = 0$.
+  \begin{equation*}
+    0 = \sum_{u=t+1}^{T} \frac{1}{H_u} (\lambda(b) - \hat{\lambda}(b)) + \sum_{u=t+1}^{T} \frac{\delta_u}{H_u}.
+  \end{equation*}
+  Rearranging explicitly for the multiplier difference yields a weighted average of errors:
+  \begin{equation*}
+    \hat{\lambda}(b) - \lambda(b) = \frac{\sum_{u=t+1}^{T} (\delta_u / H_u)}{\sum_{u=t+1}^{T} (1 / H_u)}.
+  \end{equation*}
+  Taking absolute values and applying the triangle inequality alongside $|\delta_u| \leq e_{t,u}$, we obtain:
+  \begin{equation*}
+    |\lambda(b) - \hat{\lambda}(b)| \leq \frac{\sum_{u=t+1}^{T} e_{t,u} / H_u}{\sum_{u=t+1}^{T} 1 / H_u}.
+  \end{equation*}
+  Since $\frac{1}{\beta} \leq \frac{1}{H_u} \leq \frac{1}{\mu}$, we strictly bound the sums (independently because both sums are strictly positive and the summands are positive scalars):
+  \begin{equation*}
+    \sum_u \frac{e_{t,u}}{H_u} \leq \frac{1}{\mu} \sum_u e_{t,u}, \qquad \text{and} \qquad \sum_u \frac{1}{H_u} \geq \frac{N}{\beta}.
+  \end{equation*}
+  This trivially recovers the final bound:
+  \begin{equation*}
+    |\lambda(b) - \hat{\lambda}(b)| \leq \frac{\frac{1}{\mu} \sum_u e_{t,u}}{\frac{N}{\beta}} = \frac{\beta}{\mu} \left(\frac{1}{N} \sum_{u=t+1}^{T} e_{t,u}\right) = \kappa \bar{e}_{t, >t}.
+  \end{equation*}
+  \qedhere
+\end{proof}
+
+\begin{corollary}[Total regret for the all-ones mask]
+  \label{cor:regret-all-ones}%
+  Under the assumptions of Theorems~\ref{thm:main} and~\ref{thm:epsilon-all-ones},
+  \begin{equation}
+    \label{eq:regret-all-ones}
+    \mathrm{Regret}
+    \leq \frac{1}{2\mu}\sum_{t=1}^{T} (\epsilon_t+e_{t,t})^2
+    \leq \frac{\kappa^2}{\mu}\sum_{t=1}^{T-1} \bar{e}_{t,>t}^{2} + \frac{1}{\mu}\sum_{t=1}^{T} e_{t,t}^2.
+  \end{equation}
+\end{corollary}
+
+\begin{proof}
+  Under Assumption~\ref{ass:A3} (differentiability on the closed interval $[0,s_{\max}]$), we have $\subdiff \tilde{c}_t(s_t)=\{\tilde{c}_t'(s_t)\}$ and $\subdiff \hat{c}_{t,t}(s_t)=\{\hat{c}_{t,t}'(s_t)\}$ for all $s_t \in [0,s_{\max}]$, hence $\eta_t(s_t)=|\tilde{c}_t'(s_t)-\hat{c}_{t,t}'(s_t)|\leq e_{t,t}$.
+  Therefore Theorem~\ref{thm:main} (strongly convex case) gives $\mathrm{Regret} \leq (2\mu)^{-1}\sum_{t=1}^{T} (\epsilon_t+e_{t,t})^2$ (using $\eta_t(s_t)\le e_{t,t}$).
+
+  In the all-ones case, Theorem~\ref{thm:epsilon-all-ones} gives $\epsilon_t \leq \kappa \bar{e}_{t,>t}$ for $t \in \{1,\dots,T-1\}$ and $\epsilon_T=0$, so
+  \begin{equation*}
+    \sum_{t=1}^{T} (\epsilon_t+e_{t,t})^2
+    \leq 2\sum_{t=1}^{T} \epsilon_t^2 + 2\sum_{t=1}^{T} e_{t,t}^2
+    \leq 2\kappa^2\sum_{t=1}^{T-1} \bar{e}_{t,>t}^{2} + 2\sum_{t=1}^{T} e_{t,t}^2,
+  \end{equation*}
+  so multiplying by $(2\mu)^{-1}$ gives
+  \begin{equation*}
+    \mathrm{Regret}
+    \leq \frac{\kappa^2}{\mu}\sum_{t=1}^{T-1} \bar{e}_{t,>t}^{2} + \frac{1}{\mu}\sum_{t=1}^{T} e_{t,t}^2.
+  \end{equation*}
+  \qedhere
+\end{proof}
+
+% \subsection{Approach 2: Maximum error bound}
+% \label{subsec:max-error}
+
+% The average-error bound in Theorem~\ref{thm:epsilon-all-ones} scales with the condition number $\kappa = \beta/\mu$, which can be large if the costs are not very smooth.
+% However, we can also prove a robust, absolute maximum-error bound that does not depend on the smoothness constant $\beta$.
+
+% \begin{theorem}[Maximum multiplier error bound for the all-ones mask]
+%   \label{thm:epsilon-all-ones-max}%
+%   Under Assumptions~\ref{ass:A1}--\ref{ass:A4} with $\mcal_{0}=\{\1\}$ and for $t \in \{1,\dots,T-1\}$,
+%   \begin{equation}
+%     \label{eq:epsilon-all-ones-max}
+%     \epsilon_t(b)
+%     = |\lambda(b)-\hat{\lambda}(b)|
+%     \leq \max_{u \in \{t+1,\dots,T\}} e_{t,u}.
+%   \end{equation}
+% \end{theorem}
+
+% \begin{proof}
+%   Fix $t \in \{1,\dots,T-1\}$ and let $E := \max_{u \in \{t+1,\dots,T\}} e_{t,u}$.
+%   As in the previous proofs, strong duality holds, the primal optima $s^{\star}_{t+1:T}$ and $\hat{s}_{t+1:T}$ are unique, and the dual multipliers $\lambda(b)$ and $\hat{\lambda}(b)$ are unique by the interiority assumption.
+
+%   Assume for contradiction that $\hat{\lambda}(b) < \lambda(b) - E$.
+%   Fix any tail coordinate $u \in \{t+1,\dots,T\}$.
+%   By the KKT stationarity conditions and Assumption~\ref{ass:A4} (pathwise interiority), both optima are strictly interior, so the bound multipliers vanish. Thus, we have exact equalities:
+%   \begin{equation*}
+%     \hat{c}_{t,u}'(\hat{s}_u) + \hat{\lambda}(b) = 0 \quad \text{and} \quad \tilde{c}_u'(s_u^{\star}) + \lambda(b) = 0.
+%   \end{equation*}
+%   By the definition of the uniform derivative error $e_{t,u} \leq E$, we know $\tilde{c}_u'(\hat{s}_u) \geq \hat{c}_{t,u}'(\hat{s}_u) - E$.
+%   Combining these yields
+%   \begin{equation*}
+%     \tilde{c}_u'(\hat{s}_u)
+%     \geq -\hat{\lambda}(b) - E
+%     > -\lambda(b) + E - E
+%     = -\lambda(b) = \tilde{c}_u'(s_u^{\star}),
+%   \end{equation*}
+%   so $\tilde{c}_u'(\hat{s}_u) > \tilde{c}_u'(s_u^{\star})$.
+
+%   Because $\tilde{c}_u'$ is strictly increasing by Assumption~\ref{ass:A3}, this implies $\hat{s}_u > s_u^{\star}$.
+%   Since this strict inequality holds for all $u \in \{t+1,\dots,T\}$, summing over $u$ gives
+%   \begin{equation*}
+%     \sum_{u=t+1}^{T} \hat{s}_u > \sum_{u=t+1}^{T} s_u^{\star} = b.
+%   \end{equation*}
+%   This strictly violates the primal binding budget constraint $\sum_u \hat{s}_u = b$, yielding a contradiction.
+
+%   By a symmetric argument (assuming $\lambda(b) < \hat{\lambda}(b) - E$ and swapping the roles of the true and forecasted optima), we also reach a contradiction.
+%   Therefore, $|\lambda(b) - \hat{\lambda}(b)| \leq E$, proving the bound.
+% \end{proof}
+
+% \begin{corollary}[Total regret via max error]
+%   \label{cor:regret-all-ones-max}%
+%   Under the assumptions of Theorems~\ref{thm:main} and~\ref{thm:epsilon-all-ones-max},
+%   \begin{equation*}
+%     \mathrm{Regret}
+%     \leq \frac{1}{2\mu}\sum_{t=1}^{T} \left(\max_{u \in \{t+1,\dots,T\}} e_{t,u} + e_{t,t}\right)^2.
+%   \end{equation*}
+% \end{corollary}
+
+% \begin{proof}
+%   This follows exactly as in Corollary~\ref{cor:regret-all-ones}, substituting $\epsilon_t \leq \max_{u > t} e_{t,u}$ from Theorem~\ref{thm:epsilon-all-ones-max}.
+% \end{proof}
+
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+\section{Window masks of width \texorpdfstring{$K$}{K}}
+\label{sec:window-masks}%
+
+Fix $K \in \{1,\dots,T\}$ and define the window family $\mcal_{0}^{\mathrm{win}}(K) \subseteq \{0,1\}^{T}$ by masks $M^{(i)}$, $i \in \{1,\dots,T-K+1\}$, where $M^{(i)}_u = 1$ if $u \in \{i,\dots,i+K-1\}$ and $M^{(i)}_u = 0$ otherwise.
+The linear mask constraints become
+\begin{equation*}
+  \sum_{u=i}^{i+K-1} s_u \leq L, \qquad i \in \{1,\dots,T-K+1\}.
+\end{equation*}
+
+At time $t$, let $W_t := \{i \in \{1,\dots,T-K+1\} : t \in \{i,\dots,i+K-1\}\}$ be the set of window constraints that charge $s_t$.
+The one-step feasibility bound simplifies to
+\begin{equation*}
+  \scalt(\mathbf{b}_t) = \left[0, \min\left\{s_{\max}, \min_{i \in W_t}\left(L - \sum_{u=i}^{t-1} s_u\right)\right\}\right],
+\end{equation*}
+which depends on the past only through the most recent $K-1$ allocations.
+Moreover, the directional multiplier error $\epsilon_t$ becomes the discrepancy between subgradients aggregated over the at-most-$K$ active windows that include time $t$.
+
+We introduce a pathwise binding and interiority assumption for window masks, analogous to Assumption~\ref{ass:A4}.
+\begin{assumptions}
+\item[A6.]\label{ass:A6-win} (Window-mask pathwise binding and interiority.)
+  Along the realized trajectory, for every $t \ge K-1$, every tail-active window constraint binds (is a strict equality) for both the true and forecasted tail problems.
+  Moreover, the unique optimal actions remain strictly interior: $s_u^{\star} \in (0, s_{\max})$ and $\hat{s}_u \in (0, s_{\max})$ for all $u \in \{t+1,\dots,T\}$.
+\end{assumptions}
+
+For window masks, after an initial warm-up period of $K-1$ steps, the directional multiplier error simplifies dramatically.
+We characterize the error using a window-residue selector $\gamma_t(u)$, which takes values in $\{0, 1, 2\}$ and periodically selects stages that strongly influence the active window constraints.
+
+\begin{theorem}[Multiplier error bound for window masks]
+  \label{thm:window-sensitivity}%
+  Under Assumptions~\ref{ass:A1}--\ref{ass:A3} and~A6, for any $t \ge K-1$, the directional multiplier error satisfies
+  \begin{equation}
+    \label{eq:eps-window-bound-warm}
+    \epsilon_t \leq \sum_{u=t+1}^T \gamma_t(u) \tilde{\delta}_{t,u},
+  \end{equation}
+  where the window-residue selector $\gamma_t(u) \in \{0, 1\}$ is defined as
+  \begin{equation}
+    \gamma_t(u) := \ind{u \equiv t+1 \pmod{K}}, \label{eq:gamma-window-residue}
+  \end{equation}
+  and the paired temporal variation error $\tilde{\delta}_{t,u}$ is defined as
+  \begin{equation}
+    \label{eq:tilde-delta-def}
+    \tilde{\delta}_{t,u} :=
+    \begin{cases}
+      \sup_{b \in \bcal_{t+1}^\circ} \modu{ \left(\tilde{c}_u'(s_u^\star(b)) - \hat{c}_{t,u}'(s_u^\star(b))\right) - \left(\tilde{c}_{u+K-1}'(s_{u+K-1}^\star(b)) - \hat{c}_{t,u+K-1}'(s_{u+K-1}^\star(b))\right) } & \text{if } u+K-1 \le T, \\
+      \sup_{b \in \bcal_{t+1}^\circ} \modu{ \tilde{c}_u'(s_u^\star(b)) - \hat{c}_{t,u}'(s_u^\star(b)) } & \text{if } u+K-1 > T.
+    \end{cases}
+  \end{equation}
+  By the triangle inequality, $\tilde{\delta}_{t,u}$ can be uniformly bounded by the individual stage errors: $\tilde{\delta}_{t,u} \le e_{t,u} + e_{t,u+K-1}\ind{u+K-1 \le T} \le 2 \max_{v > t} e_{t,v}$.
+\end{theorem}
+
+\begin{proof}
+  For $t \geq K-1$, there are $N \eqdef T-t$ tail variables.
+  Under Assumption~A6, the binding active tail windows number exactly $N$, indexed by $i \in \{t-K+2,\dots,T-K+1\}$. Let $A \in \R^{N \times N}$ be the incidence matrix for these active constraints, where $A_{\ell,j} = 1$ if $s_{t+j}$ is in the $\ell$-th constraint.
+  Because $A$ is a square, lower-triangular matrix with ones on the main diagonal, it is invertible.
+
+  Since all $N$ tail-active inequalities bind at the optimum and $A$ is invertible, the optimal tail allocation is uniquely determined by the linear system $A s = b$. Hence, the optimal set collapses to a singleton, and the true and forecasted optimal actions coincide perfectly: $s^\star = \hat{s} = A^{-1}b$.
+
+  Let $\lambda, \hat{\lambda} \in \R_{\ge 0}^N$ be the dual multipliers for these active constraints. Because the optimal actions $s^\star$ lie strictly in the interior $(0, s_{\max})$, the bound multipliers vanish by complementary slackness.
+  The KKT stationarity conditions thus reduce to $A^T \lambda = -\nabla \tilde{c}(s^{\star})$ and $A^T \hat{\lambda} = -\nabla \hat{c}_{t}(s^{\star})$. Since $A^T$ is invertible and the gradients are single-valued (Assumption~\ref{ass:A3}), these multipliers are unique.
+
+  Define the local gradient error $\delta \eqdef \nabla \tilde{c}(s^{\star}) - \nabla \hat{c}_{t}(s^{\star})$, which satisfies $|\delta_u| \le e_{t,u}$. We have $A^T(\hat{\lambda} - \lambda) = \delta$.
+  The directional error is an absolute difference of unique vectors:
+  \begin{equation*}
+    \epsilon_t = \modu{ (\hat{\lambda} - \lambda) \cdot m_t } = \modu{ ((A^{T})^{-1}\delta) \cdot m_t } = \modu{ \delta \cdot (A^{-1}m_t) },
+  \end{equation*}
+  where $m_t \in \{0,1\}^N$ is the restriction of the time-$t$ incidence vector to these $N$ tail-active constraints.
+  Let $w \eqdef A^{-1}m_t$. The vector $w \in \R^N$ is defined by the forward-substitution recurrence $A w = m_t$.
+  Because $m_t$ has ones for its first $K-1$ entries and zeros thereafter, the recurrence is:
+  $\sum_{j=1}^{r} w_j = 1$ for $r < K$, and $\sum_{j=r-K+1}^{r} w_j = 0$ for $r \geq K$.
+  Solving explicitly yields $w_r = 1$ if $r \equiv 1 \pmod{K}$, $w_r = -1$ if $r \equiv 0 \pmod{K}$, and $w_r = 0$ otherwise.
+
+  Substituting $w$ into the inner product bundles the sum into consecutive pairs:
+  \begin{equation*}
+    \delta \cdot w = \sum_{r=1}^{N} \delta_{t+r} w_r = \sum_{\substack{1 \le r \le N \\ r \equiv 1 \pmod{K}}} \left( \delta_{t+r} - \delta_{t+r+K-1} \ind{r+K-1 \le N} \right).
+  \end{equation*}
+  Taking the absolute value of the total sum and applying the triangle inequality over the pairs yields
+  \begin{equation*}
+    \epsilon_t(b) \le \sum_{\substack{1 \le r \le N \\ r \equiv 1 \pmod{K}}} \modu{ \delta_{t+r} - \delta_{t+r+K-1} \ind{r+K-1 \le N} }.
+  \end{equation*}
+  Mapping indices back to $u = t+r$ identifies the condition $u \equiv t+1 \pmod{K}$, which precisely matches the selector $\gamma_t(u)$.
+  The paired difference $\modu{\delta_u - \delta_{u+K-1} \ind{u+K-1 \le T}}$ corresponds exactly to the components defining~\eqref{eq:tilde-delta-def}.
+  Taking the supremum over all $b \in \bcal_{t+1}^\circ$ bounds the uniform directional error $\epsilon_t \le \sum_{u=t+1}^{T} \gamma_t(u) \tilde{\delta}_{t,u}$.
+\end{proof}
+
+\begin{corollary}[Total regret for window masks]
+  \label{cor:regret-window}%
+  Under the assumptions of Theorems~\ref{thm:main} and~\ref{thm:window-sensitivity}, the total regret accumulated from time $K-1$ onward is bounded by
+  \begin{equation}
+    \label{eq:regret-window}
+    \mathrm{Regret}_{\geq K-1}
+    \eqdef \sum_{t=K-1}^{T} \delta_t
+    \leq \frac{1}{2\mu}\sum_{t=K-1}^{T} \left( e_{t,t} + \sum_{u=t+1}^{T} \gamma_t(u) \tilde{\delta}_{t,u} \right)^2.
+  \end{equation}
+  Alternatively, expressed entirely in terms of the uniform stage errors $e_{t,u}$:
+  \begin{equation}
+    \label{eq:regret-window-e}
+    \mathrm{Regret}_{\geq K-1}
+    \leq \frac{1}{2\mu}\sum_{t=K-1}^{T} \left( e_{t,t} + \sum_{u=t+1}^{T} \gamma_t(u) \left(e_{t,u} + e_{t,u+K-1}\ind{u+K-1 \le T}\right) \right)^2.
+  \end{equation}
+\end{corollary}
+
+\begin{proof}
+  By Theorem~\ref{thm:main}, the one-step Bellman suboptimality is bounded by $\delta_t \leq \frac{1}{2\mu}(\epsilon_t + \eta_t)^2$.
+  Under Assumption~\ref{ass:A3}, since $s_t \in (0, s_{\max})$, the subdifferentials are singletons and $\eta_t(s_t) = |\tilde{c}_t'(s_t) - \hat{c}_{t,t}'(s_t)| \le e_{t,t}$.
+  Substituting the multiplier error bound $\epsilon_t \leq \sum_{u=t+1}^{T} \gamma_t(u) \tilde{\delta}_{t,u}$ from Theorem~\ref{thm:window-sensitivity} yields~\eqref{eq:regret-window}.
+  The second bound~\eqref{eq:regret-window-e} follows directly by applying the uniform upper bound $\tilde{\delta}_{t,u} \le e_{t,u} + e_{t,u+K-1}\ind{u+K-1 \le T}$ established in Theorem~\ref{thm:window-sensitivity}.
+\end{proof}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\end{document}

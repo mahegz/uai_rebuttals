@@ -1,0 +1,20 @@
+seed: 0
+alpha: 0.15
+T: 20
+num_runs: 100
+grid_points: 81
+data_dir: code/data
+out_dir: .workspace/experiments/main
+tasks: [regression, classification]
+conditions: [nodrift, drift]
+window_sizes: [1, 3, 5, 7, 9]
+forecasters: [ewma, blend]
+include_oracle: false
+smoothing:
+  kind: gaussian_cdf_spline
+  bandwidth: null
+  bandwidth_multiplier: 1.0
+  spline_points: 400
+forecast:
+  decay: 0.7
+  blend_weight: 0.35

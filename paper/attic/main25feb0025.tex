@@ -1,0 +1,1892 @@
+\documentclass{uai2026} % for initial submission
+%\documentclass[accepted]{uai2026} % after acceptance
+
+%% Choose your variant of English; be consistent
+\usepackage[american]{babel}
+
+%% Bibliography / citations
+\usepackage{natbib}
+\bibliographystyle{plainnat}
+\renewcommand{\bibsection}{
+\subsubsection*{References}}
+
+%% Math / tables / figures
+\usepackage{mathtools}
+\usepackage{amssymb}
+\usepackage{amsthm}
+
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\graphicspath{{figures/}}
+\usepackage{bm}
+\emergencystretch=1em
+\hfuzz=1pt
+
+%% Todo notes
+% \usepackage{fix_todonotes_marginparwidth}
+\usepackage[colorinlistoftodos,prependcaption,textsize=tiny]{todonotes}
+\presetkeys{todonotes}{inline}{}
+%% Theorem environments
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+\newtheorem*{remark}{Remark}
+\newtheorem{lemma}{Lemma}
+\newtheorem{example}[theorem]{Example}
+
+%% Self-defined macros
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\R}{\mathbb{R}}
+
+\newcommand{\nset}{\N}
+\newcommand{\rset}{\R}
+\newcommand{\1}{\mathbf{1}}
+\newcommand{\ind}[1]{\mathbf{1}\{#1\}}
+\newcommand{\prob}{\mathbb{P}}
+\newcommand{\expec}{\mathbb{E}}
+\newcommand{\cprob}[2]{\prob\left(#1 \mid #2\right)}
+\newcommand{\cexpec}[2]{\expec\left[#1 \mid #2\right]}
+\newcommand{\test}{\mathrm{test}}
+% Instance, label, and score spaces
+\newcommand{\xcal}{\mathcal{X}}
+\newcommand{\ycal}{\mathcal{Y}}
+\newcommand{\scal}{\mathcal{S}}
+\newcommand{\scalt}{\mathcal{S}_{t}}
+% Definitions and bracketing
+\renewcommand{\epsilon}{\varepsilon}
+\newcommand{\eps}{\varepsilon}
+\newcommand{\eqdef}{\coloneqq}
+\newcommand{\ens}[1]{\left\{#1\right\}}
+\newcommand{\open}[1]{\left(#1\right)}
+\newcommand{\closed}[1]{\left[#1\right]}
+\newcommand{\modu}[1]{\left|#1\right|}
+\newcommand{\ecal}{\mathcal{E}}
+\newcommand{\err}{\mathrm{err}}
+% Filtrations and masks
+\newcommand{\F}{\mathcal{F}}
+\newcommand{\G}{\mathcal{G}}
+\newcommand{\fcal}{\F}
+\newcommand{\gcal}{\G}
+\newcommand{\mcal}{\mathcal{M}}
+\newcommand{\cali}{\mathrm{cal}}
+% Datasets
+\newcommand{\scalcal}{\scal_{\cali}}
+\newcommand{\scaltest}{\scal_{\test}}
+% Conditional on $\fcal_{t}$
+\newcommand{\probt}[1]{\prob\left(#1 \mid \fcal_{t}\right)}
+\newcommand{\expect}[1]{\expec\left[#1 \mid \fcal_{t}\right]}
+
+% Draft comments toggle
+\newcommand{\mhegz}[1]{\todo[linecolor=blue,backgroundcolor=blue!10,bordercolor=blue,inline]{MH: #1}}
+\newcommand{\mh}[1]{{\color{blue}\textbf{MH: #1}}}
+
+% Citation placeholder
+\newcommand{\citeneeded}[1][]{{\color{red}\textbf{[#1]}}}
+
+% Wealth/capital (Section 5 baseline)
+\newcommand{\K}{K}
+\newcommand{\Bnd}{B}
+
+% Dual / subdifferential notation
+\newcommand{\subdiff}{\partial}
+\newcommand{\bcal}{\mathcal{B}}
+\newcommand{\acal}{\mathcal{A}}
+\newcommand{\argmin}{\operatorname*{argmin}}
+\newcommand{\argmax}{\operatorname*{argmax}}
+
+% Numbered assumptions environment
+\newenvironment{assumptions}{%
+  \begingroup
+  \renewcommand{\labelenumi}{\textbf{A\arabic{enumi}}.}%
+  \renewcommand{\theenumi}{A\arabic{enumi}}%
+  \begin{enumerate}
+    }{%
+  \end{enumerate}
+  \endgroup
+}
+
+\newcommand{\aymeric}[1]{\textcolor{red}{ad: #1}}
+
+\title{Anyhow Conformal Prediction}
+
+% Filled for convenience; removed automatically for anonymous submission.
+\author[1]{Anonymous Authors}
+\affil[1]{Anonymous Affiliation}
+
+\begin{document}
+\maketitle
+%\listoftodos % Uncomment to see all todos at once
+
+\begin{abstract}
+Conformal prediction in batch-sequential settings can require coverage guarantees that are localized to flexible evaluation windows, renew after failures, and do not depend on past test labels. We show that under conditional within-batch exchangeability, conformal p-values across batches are mutually independent, reducing threshold design to a convex program over a log-error budget with linear constraints. This yields mask-valid conformal prediction, a framework that controls error probabilities over arbitrary families of monitoring masks. We define admissible algorithms satisfying restart validity and calibration-data measurability, and show that existing wealth-based procedures fail both properties. For unknown horizons, we further demonstrate that wealth-based methods can become vacuous exponentially faster than simple alpha-spending schedules under a tractable parametric score model. Experiments on regression and classification benchmarks validate the framework.
+\end{abstract}
+
+
+\section{Introduction}
+
+Conformal prediction provides distribution-free prediction sets with finite-sample coverage guarantees~\citep{vovk2005algorithmic,angelopoulos2024theoretical,shafer2008tutorial}.
+Given a predictor $f:\xcal\to\ycal$, a calibration dataset $\scalcal=\ens{(X_1,Y_1),\ldots,(X_n,Y_n)}\subseteq\xcal\times\ycal$ and a test point $X$, split conformal prediction constructs a set-valued map $C_\alpha:\xcal \to \{0,1\}^{\ycal}$ satisfying
+\begin{equation*}
+  \prob\ens{Y\not\in C_\alpha(X)}\le \alpha,
+\end{equation*}
+for the unobserved test label $Y$, whenever $(X,Y)$ is exchangeable with $\scalcal$ and $\alpha\in(0,1)$.
+
+In practice, data may arrive in a batch-sequential manner. For example, consider a factory in which parts are continuously produced and inspected in batches at every timestep $t\in\{1,\dots,T\}$. Each new batch provides a small labeled calibration set $\scalcal^t$, alongside one or more unlabeled test features $X_t$ whose unobserved labels $Y_t$ we wish to cover with confidence sets $\acal_t(X_t)$. Similarly, in a clinical setting, an AI diagnostic may be deployed and expert radiologists definitively label a subset of medical scans at the end of each weekly shift.
+
+In these scenarios, information obtained from earlier batches may be used to adapt parameters for the current batch, potentially leading to arbitrary dependencies across time. Nevertheless, the underlying environment typically remains stable during the processing of an individual batch. We thus assume that, conditional on the history of past batches, the test points are exchangeable with $\scalcal^t$. Under such conditions, for each time $t$, a decision maker may directly employ split conformal prediction using $\scalcal^t$ to guarantee that
+\begin{equation}
+  \label{eq:marginal_horizon}
+  \prob\ens{Y_t\not\in \acal_t(X_t)}\le \alpha,\qquad \forall t\in\{1,\dots,T\}.
+\end{equation}
+for an unlabeled test point $X_t$ with true label $Y_t$.
+
+However, \textit{marginal coverage at each timestep} does not address two requirements that naturally arise in continual monitoring. First, practitioners often need guarantees localized to specific evaluation windows rather than the entire history. For instance, a quality regulator might audit a rolling window of recent predictions, or an analyst might evaluate coverage during a specific production shift. Second, coverage failures rarely terminate the system. A self-driving car that makes one incorrect prediction continues driving. Guarantees should therefore remain valid after each failure, as if the monitoring process restarted. We call this property \emph{restart validity} and formalize it in Section~\ref{sec:admissible}.
+% aymeric: I believe this should come after anytime
+
+To address sequential coverage control,~\citet{gauthier2025values} propose anytime-valid conformal prediction, which generates the conformal predictors $\acal_1, \ldots, \acal_T$ such that
+\begin{equation}
+  \label{eq:anytime_conformal_guarantee}
+  \prob\ens{\exists t: Y_t\not\in \acal_t(X_t)} \le \alpha.
+\end{equation}
+In words, the probability that there will ever be a coverage error across the entire sequence of predictions is controlled at level $\alpha$. To provide such guarantees, even under unknown horizons $T$,~\citet{gauthier2025values} propose leveraging conformal e-values~\citep{grunwald2020safe} to construct a wealth process. Informally, in our setting, for a sequence of test points $(X_1, Y_1), \ldots$, a wealth process is a nonnegative supermartingale $(W_t)_{t\ge 0}$ constructed from initial capital $W_0=1$. Then for each $t$, a conformal e-value $E_t(X_t, Y_t)$ is computed and used to transition the wealth to $W_t$ from $W_{t-1}$. Crucially, $(W_t)_{t\ge 0}$ is constructed such that it is a supermartingale under the assumption that, conditional on past batches, $(X_t,Y_t)$ is exchangeable with $\scalcal^t$. For the conformal sets
+\begin{equation*}
+  \acal_t(X_t) = \ens{y \in \ycal : W_{t} < 1/\alpha},
+\end{equation*}
+an application of Ville's inequality~\citep{ville1939etude} guarantees that the wealth safely remains below $1/\alpha$ with high probability, securing the anytime-valid coverage property in \eqref{eq:anytime_conformal_guarantee} \aymeric{stating Ville's ineq would be helpful}.
+
+Wealth processes provide a natural and general framework for sequential testing~\citep{shafer2011test,ramdas2023game}. In the batch-sequential monitoring setting, however, they present several limitations. The wealth update requires the realized test label at each step, whereas labels are often delayed or unavailable in practice. In addition, anytime-validity controls a single boundary-crossing event and does not entail restart validity, i.e., after a coverage failure, it is uninformative about the probability of subsequent errors. Moreover, the anytime guarantee requires that a miscoverage never happens, which can be stronger than what most settings require, and as such leads to unnecessarily large prediction sets.
+
+% In this paper, we start by showing that under conditional within-batch exchangeability, the conformal $p$-values across different batches are mutually independent (Proposition~\ref{prop:iid-pvalues}). This independence provides considerable structure that allows us to address the limitations above. The problem reduces to designing deterministic threshold schedules that are automatically restart-valid and require no label access beyond the calibration set. More concretely, coverage control becomes a finite-dimensional resource allocation problem: for any family of monitoring masks $\mcal_0 \subseteq \{0,1\}^{T}$, validity is equivalent to a system of linear constraints on a log-error budget, avoiding the conservatism of both anytime guarantees and Bonferroni splitting. We introduce the concept of \emph{mask-valid conformal prediction} to formalize these localized coverage requirements and solve the resulting design problem via convex optimization.
+
+% \paragraph{Contributions.} In this paper, we formalize sequential batch conformal prediction and develop an optimization-based framework for threshold design under localized coverage requirements. We prove that batch conformal $p$-values are mutually independent under conditional within-batch exchangeability, and use this to define \emph{admissible} algorithms as those satisfying restart validity and calibration-data measurability, showing that wealth-based procedures fail both desiderata. Exploiting this structure, we cast open-loop threshold design as a convex program over a log-error budget and analyze closed-loop policies as sequential replanning, proving pathwise suboptimality bounds controlled by forecast errors.
+
+
+
+
+\paragraph{Contributions and Outline.} In this paper, as starting points, we show that in the batch-sequential conformal setting, the independence of batch-conformal $p$-values provides considerable structure that addresses the limitations above. In particular, in Section~\ref{sec:setup}, we formalize batch-sequential conformal prediction and prove that batch-conformal $p$-values are mutually independent under conditional within-batch exchangeability. In Section~\ref{sec:admissible}, we define two desiderata restart validity and calibration-data measurability, define \emph{admissible} algorithms as those satisfying them, and show that wealth-based procedures fail both. Exploiting the structure provided by $p$-value independence, Section~\ref{sec:finite} casts algorithmic design as a convex program over a log-error budget, analyzes sequential replanning policy, which replans at each time $t$ using the forecasted future cost curves, and proves pathwise suboptimality bounds controlled by forecast errors. One nice property of wealth process is ability that they dont require prior knowledge of the horizon $T$. Nonetheless, Section~\ref{sec:ville}  demonstrate a simple alpha-spending schedule, which provide anytime-valid coverage without requiring knowledge of $T$. In addition, it demonstrates that wealth-based methods can become vacuous exponentially faster than this alpha-spending schedules under a tractable parametric statistical model, which encompasses the Gaussian error model. Finally,
+
+\paragraph*{Related work.}
+Our work directly builds on multiple bodies of literature. In particular, we rely on conformal $p$-values \citep{papadopoulos2002inductive}, which underpins split conformal prediction~\citep{papadopoulos2008inductive,lei2018distribution,romano2019conformalized} and are fundamental for conformal false discovery rate control~\citep{bates2023testing,jin2023selection}. In
+
+Under online data arrival, multiple works address sequential conformal inference under arbitrary distribution shifts. In particular, Adaptive Conformal Inference~\citep{gibbs2021adaptive} and subsequent works~\citep{bhatnagar2023improved,angelopoulos2023conformal,gibbs2024conformal} operate in an online setting without exchangeability assumptions. Consequently, they provide empirical frequency guarantees, ensuring that the time-averaged proportion of miscoverage approaches $\alpha$. While methods targeting local intervals~\citep{bhatnagar2023improved,gibbs2024conformal} align with our goal of localized monitoring and operate under strictly weaker assumptions than this work, their empirical frequency control is strictly weaker than our exact, finite-sample marginal probability guarantees over any mask. In particular, under the shortly introduced mask validity (Definition~\ref{def:mask-validity}), we bound the probability of making at least one error within a given window, whereas empirical frequency methods only bound the average miscoverage rate across that window.
+
+In the batch setting, multivalid conformal prediction~\citep{jung2023batch} uses convex programming for threshold design, an approach close in spirit to ours. Concretely, we show in Section~\ref{sec:optimal_schedule} that the problem of designing sequential conformal algorithms can be reduced to a resource allocation problem whose solution is a threshold schedule. Generalizations beyond exchangeability~\citep{barber2023conformal} address a complementary direction: non-exchangeable data within batches, whereas we assume within-batch exchangeability but allow for out-of-batch distribution shifts.
+
+
+Furthermore, the replanning policy in Section~\ref{sec:replanning} and its regret analysis connect to the literature on receding-horizon control and optimization under uncertainty~\citep{lin2021perturbation,lin2022bounded,li2020leveraging,vera2021online}. A recurring perspective in this literature is to control the suboptimality of a
+replanning rule via per-step losses induced by mismatch between realized and forecasted quantities. Under suitable curvature or stability conditions this yields regret bounds that scale quadratically with prediction errors. For instance,  \citet{li2020leveraging} obtain an analogous squared-prediction-error bound with a prefactor depending inversely on strong convexity.
+Our setting differs in that there are no dynamics or switching costs. The state  is captured remaining budgets and evolves deterministically. Our suboptimality analysis (Theorem~\ref{thm:replan-regret} inSection~\ref{sec:suboptimality}) is naturally expressed through forecast-induced discrepancies in the \emph{dual}multipliers; for the all-ones mask this specializes to an explicit bound in terms of derivative forecast errors
+(Corollary~\ref{cor:regret-allones-app}).
+
+
+The anytime-valid inference and e-value based testing literature~\citep{grunwald2020safe,vovk2021values,ramdas2023game,howard2021time} and its recent extensions to conformal settings~\citep{gauthier2025values,vovk2025conformal,balinsky2024enhancing} provide the foundational wealth-process baseline introduced by~\citet{gauthier2025values}. Meanwhile, in a concurent work,~\citet{hultberg2026anytime} tackled the related problem of anytime-valid conformal risk control, where the calibration dataset is accumulated over time.
+
+
+% \paragraph*{Related work.}
+% Our work directly builds on split conformal prediction~\citep{papadopoulos2008inductive,lei2018distribution,romano2019conformalized}. In particular, we rely on conformal $p$-values, whose connections to FDR control~\citep{bates2023testing,jin2023selection} underpin both our independence result and the budget formulation.
+
+% Several lines of work address sequential conformal inference under distribution shift. Adaptive Conformal Inference~\citep{gibbs2021adaptive} and its extensions~\citep{bhatnagar2023improved,angelopoulos2023conformal,gibbs2024conformal} operate in an online setting without exchangeability assumptions. Consequently, they provide empirical frequency guarantees, ensuring that the time-averaged proportion of miscoverage approaches $\alpha$. While methods targeting local intervals~\citep{bhatnagar2023improved,gibbs2024conformal} align with our goal of localized monitoring, their empirical frequency control is strictly weaker than our exact, finite-sample marginal probability guarantees over any mask. In the batch setting, multivalid conformal prediction~\citep{jung2023batch} uses convex programming for threshold design, an approach closest in spirit to ours. Our contribution is to show that independence of batch $p$-values reduces the problem to a linear resource allocation formulation that simultaneously handles mask families and restart validity. Generalizations beyond exchangeability~\citep{barber2023conformal} address a complementary direction: non-exchangeable data within batches, whereas we assume within-batch exchangeability and focus on the across-batch structure.
+
+% The anytime-valid inference and e-value based testing literature~\citep{grunwald2020safe,vovk2021values,ramdas2023game,howard2021time} and its recent extensions to conformal settings~\citep{gauthier2025values,vovk2025conformal,balinsky2024enhancing} provide the foundational wealth-process baseline introduced by~\citet{gauthier2025values}. Concurrently,~\citet{hultberg2026anytime} tackled the related problem of anytime-valid conformal risk control, where the calibration dataset is accumulated over time.
+
+
+% \aymeric{the follwogin paragraph is unclear}
+% The replanning policy in Section~\ref{sec:replanning} and its regret analysis
+% connect to the literature on online MPC \aymeric{what is that? } 
+% suboptimality.
+% \citet{lin2021perturbation} introduce a perturbation-based framework showing
+% that MPC regret in linear time-varying systems decomposes into per-step errors
+% decaying exponentially with the prediction window under strong convexity,
+% extended by~\citet{lin2022bounded} to handle prediction errors, state
+% constraints, and nonlinear dynamics.  In smoothed online convex optimization,
+% \citet{li2020leveraging} prove that gradient-based receding-horizon algorithms
+% achieve regret scaling quadratically in prediction errors with an inverse
+% strong-convexity prefactor, a structure shared by our
+% Theorem~\ref{thm:replan-regret}.  The closest analog in problem structure is
+% the RABBI framework of~\citet{vera2021online}, which decomposes online
+% allocation regret into per-step Bellman losses of a re-solving policy under
+% budget constraints and achieves $O(1)$ regret via concentration.  Our setting
+% differs from all four in that there are no dynamics or switching costs: the
+% state is a vector of remaining log-budgets evolving deterministically, and the
+% per-step Bellman error $\delta_t$ is driven by forecast-induced \emph{dual}
+% multiplier discrepancies rather than primal parameter or trajectory
+% perturbations.
+
+% Finally, our log-error budget formulation draws on classical $\alpha$-spending~\citep{lan1983discrete} and $\alpha$-wealth allocation~\citep{foster2008alpha} from sequential analysis. The key structural difference is that independence of batch conformal $p$-values, which parallels the independence structure exploited in batched online testing~\citep{zrnic2020power}, allows exact product-form risk evaluation rather than conservative bounds. This connection also relates to interactive testing frameworks such as STAR~\citep{lei2017star} which operate under general structural constraints on the rejection process.
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                SECTION BREAK
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Setup and Background}
+\label{sec:setup}
+\label{sec:batch}
+
+This section formalizes the sequential batch conformal prediction setting, introduces masked monitoring, and reviews anytime monitoring via e-values and wealth processes.
+
+Fix a horizon $T\in\N$ and consider batches $t=1,\dots,T$. At time $t$, we receive a calibration set $\scalcal^t \coloneqq \{(X_{t,i},Y_{t,i})\}_{i=1}^n$ of size $n>1$, which we assume to be constant across $t$ purely to ease notation. Alongside, we also consider a test set $\scaltest^t$ whose labels are unobservable at time $t$. Let $\F_0$ be a $\sigma$-algebra representing any prior data available before monitoring begins. For $t\ge 1$, let $\F_t$ be the $\sigma$-algebra generated by $\F_{t-1}$ and all data from batch $t$, including unobserved test labels. We define the observable sub-filtration $(\G_t)_{t\ge 0}$ where $\G_0 \subseteq \F_0$ captures observable prior data, and for $t \ge 1$, $\G_t \subset \F_t$ is generated by $\G_{t-1}$ along with the calibration set and test features of batch $t$, but not the test labels. Conditional on $\F_{t-1}$, we assume every test point $(X, Y) \in \scaltest^t$ is exchangeable with $\scalcal^t$. This permits arbitrary cross-batch dependence between $\scal^t \eqdef \scaltest^t \cup \scalcal^t$ and $\F_{t-1}$.
+
+At time $t$, the conformal algorithm uses a $\fcal_{t-1}$-measurable score function $s_t:\xcal\times\ycal\to\R$. Define calibration scores $S_{t,i}:=s_t(X_{t,i},Y_{t,i})$ for $(X_{t,i},Y_{t,i})\in \scalcal^t$. Without loss of generality and to lighten notation, we assume that all scores are almost surely unique. In practice, if ties occur, they can be broken uniformly at random. For a test feature $x$, the split conformal $p$-value~\citep{papadopoulos2008inductive} \aymeric{why this ref? I think this dates back to Vovk, doesn't it?} for a candidate label $y$ is
+\begin{equation} \label{eq:pt-def}
+p_t(x,y):=\frac{1+\sum_{i=1}^{n}\ind{S_{t,i}>s_t(x,y)}}{n+1}.
+\end{equation}
+By construction, $p_t(X_t, Y_t)$ is sub-uniform, satisfying $\prob(p_t(X_t, Y_t) \le \alpha \mid \F_{t-1}) \le \alpha$ for any significance level $\alpha \in [0,1]$. This naturally defines the $\alpha$-level conformal prediction set $\{y \in \ycal : p_t(x,y) > \alpha\}$. We now proceed to defining conformal e-values.
+
+\begin{definition}[Conformal e-function]
+  A conformal e-function at time $t$ is any nonnegative, $\sigma(\F_{t-1} \cup \G_t)$-measurable function $E_t:\xcal\times\ycal\to\R_{\ge 0}$ such that $E_t(X,Y)$ is a conformal e-value, i.e.,  $\expec[E_t(X,Y) \mid \F_{t-1}] \le 1$ whenever $(X,Y)$ is conditionally exchangeable with $\scalcal^t$ given $\F_{t-1}$.
+\end{definition}
+
+We now illustrate two independent ways of constructing such conformal e-functions. First, one can apply an e-value calibrator~\citep{vovk2021values} to the conformal $p$-value $p_t(X,Y)$. A calibrator is a decreasing function $f:[0,1]\to\R_{\ge 0}$ such that $\int_0^1 f(u) du \le 1$. As such $(X,Y) \mapsto f(p_t(X,Y))$ can be shown to be an e-function. Second, as developed recently~\citep{balinsky2024enhancing,gauthier2025values}, one can construct an e-function directly from the non-conformity scores without passing through $p$-values. Specifically, if $s_t(\cdot, \cdot) \ge 0$, a valid conformal e-function is given by
+\begin{equation*}
+  E_t(x, y) = \frac{(n+1)s_t(x,y)}{\left( s_t(x,y) + \sum_{i=1}^n S_{t,i} \right)}.
+\end{equation*}
+With conformal p-values and e-values defined, we now define sequential monitoring algorithms.
+
+\begin{definition}[Sequential Monitoring Algorithms]
+  Let $\ecal = (\epsilon_t)_{t=1,\ldots,T}$ be a sequence of algorithmic random seeds, independent of all observed data, i.e., independent of $\F_T$. A sequential monitoring algorithm $\acal$ outputs a set-valued mapping $X \mapsto \acal_t(X, \epsilon_t) \subseteq \ycal$ at each step $t$. At time $t$, for a test point $(X, Y) \in \scaltest^t$, we define the incurred error
+  \begin{equation*}
+    \err_t(\acal, X, Y) \eqdef \ind{Y \not\in \acal_t(X,\epsilon_t)}.
+  \end{equation*}
+\end{definition}
+
+In the remainder of the paper, we suppress the explicit dependence of $\acal_t$ on $\epsilon_t$ to lighten notation; $\epsilon_t$ simply represents the internal randomness of the algorithm. We formalize this randomness by defining the algorithmic filtration $\mathcal{H}_t \eqdef \sigma(\epsilon_1, \dots, \epsilon_t)$. 
+
+A direct example of such sequential algorithms is the anytime-valid conformal prediction framework introduced by~\citet{gauthier2025values}.
+Evaluating sequential conformal e-functions on the observed test stream yields realized e-values $E_t(X_t, Y_t)$ which are nonnegative and satisfy $\expec[E_t(X_t, Y_t) \mid \F_{t-1}] \le 1$. To construct a wealth process, one introduces a predictable learning rate $\lambda_t \in [0,1]$ which is $\F_{t-1}$-measurable. The wealth process $(W_t)_{t\ge 0}$ is then defined recursively, starting with $W_0=1$, via the mixture update $W_t = W_{t-1} \left(1 - \lambda_t + \lambda_t E_t(X_t, Y_t)\right)$.
+By construction, $(W_t)_{t \ge 0}$ is a nonnegative supermartingale, and Ville's inequality implies $\prob\left(\sup_{t\ge 1} W_t\ge \alpha^{-1}\right)\le \alpha.$
+
+At each step $t$, the conformal prediction set is constructed by inverting this wealth process over all candidate labels $y \in \ycal$:
+\begin{equation*}
+  \acal_t(X) = \{y \in \ycal \colon W_{t-1} (1 - \lambda_t + \lambda_t E_t(X, y)) < \alpha^{-1}\}.
+\end{equation*}
+Note that because both the learning rate $\lambda_t$ and the historical wealth $W_{t-1}$ depend on past features and true test labels via $\F_{t-1}$, updating $W_t$ requires the realized test labels from all previous steps.
+
+\subsection{Masked Monitoring}
+\aymeric{clarify if this is something we propose (a new concept) - then we would ideally need refs from the applicative domains - or existing}
+In sequential monitoring, requiring strict anytime-validity, which bounds the probability of committing a single miscoverage over the full deployment, may be excessively conservative in some settings. For instance, organizations may aim to audit models over specific events, or rolling timeframes instead of the entire horizon. We formalize this by relaxing the coverage requirement of anytime-validity (Eq.~\ref{eq:anytime_conformal_guarantee}) using a mask-based validity, which uses a boolean mask to specify the times at which the algorithm's predictions are actively monitored. This approach provides a flexible framework, which interpolates between and recovers each of the marginal guarantee in Eq.~\ref{eq:marginal_horizon}, and anytime guarantee in Eq.~\ref{eq:anytime_conformal_guarantee}.
+
+% \aymeric{is there a way to avoid the redundant notations $S(M)$ and $M$? $M\in \ens{0,1}^T$ can be seen as a subset of $[T]$ directly}
+Formally, let $M\in \ens{0,1}^T$ be a mask, where $M_t=1$ indicates that the algorithm's predictions are actively monitored at time $t$. Let $S(M) := \{t \in \{1,\dots,T\} \colon M_t=1\}$ denote the set of monitored timesteps. For mask $M$ and an algorithm $\acal$, the masked failure event is the occurrence of at least one error during the monitored timesteps, i.e.,
+\begin{equation}
+  \label{eq:mask_valid_norestart}
+  F_T(M, \acal):=\left\{\exists t\in S(M)\colon \err_t(\acal) = 1\right\}.
+\end{equation}
+In addition, we may not be interested in a single mask but rather a family of masks $\mcal \subseteq\{0,1\}^T$. Then, an algorithm $\acal$ is \emph{$\mcal$-valid at level $\alpha$} if
+\begin{equation*}
+  \sup_{M\in\mcal}\prob(F_T(M, \acal))\le\alpha.
+\end{equation*}
+In words, we require a uniform guarantee over the full prescribed mask family $\mcal$. We illustrate a few examples of mask families.
+
+\begin{example}[All-ones mask]
+  The family $\mcal = \{ (1, 1, \dots, 1) \}$ recovers standard anytime monitoring (Eq.~\ref{eq:anytime_conformal_guarantee}), controlling the error rate uniformly across the entire horizon.
+\end{example}
+
+\begin{example}[Singleton masks]
+  The family of singleton masks $\mcal = \{ M^{(k)} \}_{k=1}^T$, where each $M^{(k)}$ equals $1$ at time $k$ and $0$ everywhere else, recovers marginal coverage guarantees (Eq.~\ref{eq:marginal_horizon}), as it requires validity only at individual, isolated timesteps.
+\end{example}
+
+\aymeric{We need to give another intersting example here i believe to trly convince the reader of the interest of such a new concept}
+
+\subsection{Distribution of Conformal \texorpdfstring{$p$}{p}-values}
+\label{sec:distribution-pvalues}
+
+A fundamental property of the sequential setup is that conformal $p$-values computed via \eqref{eq:pt-def} for the true test labels are completely independent of one another.
+
+\begin{proposition}[Independence of sequential batch conformal $p$-values]
+  \label{prop:iid-pvalues}
+  Under conditional within-batch exchangeability, for any sequence of test points $(X_1,Y_1), \ldots, (X_T,Y_T) \in \prod_{t=1}^{T} \scaltest^t$, the corresponding conformal $p$-values $(p_1(X_1,Y_1), \ldots, p_T(X_T, Y_T))$ are mutually independent.
+  Moreover, for each $t\ge 1$, the random variable $p_t(X_t, Y_t)$ is uniform on $\{1/(n+1),2/(n+1),\ldots,1\}$ and independent of $\F_{t-1}$.
+\end{proposition}
+ \aymeric{add a comment saying that it is malmsot obvious}
+
+To streamline the presentation in subsequent sections, unless stated otherwise, we focus on a single sequence of test points $(X_t,Y_t)_{t\ge 1}$ extracted from the test sets, effectively reducing to one test point per batch; the underlying mask framework inherently generalizes to evaluating multiple test sequences or full test sets simultaneously.
+
+\begin{remark}
+  Proposition~\ref{prop:iid-pvalues} holds even when the score function $s_t$ is trained adaptively on past~\citeneeded[Vovk (2012) "Conditional Validity of Inductive...": Validity with scores measurable w.r.t. past information] batches (closed-loop calibration): the dependence on the past is absorbed into $\F_{t-1}$, and exchangeability within the current batch still forces the test score rank to be uniform.
+  This independence is the foundational fact the paper exploits.
+\end{remark}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Admissible Algorithms}
+\label{sec:admissible}
+\label{sec:beyond}
+
+Having established the distributional properties of sequential batch conformal prediction, we now formalize the information model underlying sequential monitoring algorithms and introduce restart validity. These concepts lead to two structural desiderata that jointly define what we call \emph{admissible} algorithms; we show that wealth-based procedures violate both.
+
+We first classify algorithms by the information they access at each step.
+
+\begin{definition}[Sequential Information Models]
+  Fix a horizon $T\in\N$. At each step $t$, a sequential monitoring algorithm is classified based on the measurability of its mapping $\acal_t$:
+  \textbf{(1) Open-loop}: measurable with respect to $\sigma(\scalcal^t, \mathcal{H}_t)$; \aymeric{$\sigma(\scalcal^t, \epsilon_t)$;}
+  \textbf{(2) Closed-loop}: measurable with respect to $\sigma(\F_{t-1}, \scalcal^t, \mathcal{H}_t)$;
+  \textbf{(3) Restricted closed-loop}: measurable with respect to $\sigma(\G_t, \mathcal{H}_t)$.
+\end{definition}
+
+Open-loop algorithms fix their decision rules prior to deployment, relying solely on the current batch's calibration data and internal randomness. Closed-loop algorithms dynamically incorporate the full history of past calibration data, test features, and labels. Restricted closed-loop algorithms also adapt dynamically but observe only past calibration data, reflecting scenarios where true test labels remain unobserved. As noted in Section~\ref{sec:setup}, the wealth-based procedure of~\citet{gauthier2025values} is inherently closed-loop, since updating the wealth $W_t$ requires the realized test label at every previous step.
+
+Next, we formalize the behavior of monitoring guarantees after errors have occurred. While mask validity (Eq.~\ref{eq:mask_valid_norestart}) bounds the probability of the first monitored error, it is uninformative thereafter: it provides no guarantees on additional errors following the initial failure. Indeed, any closed-loop policy can artificially satisfy Eq.~\eqref{eq:mask_valid_norestart} while deterministically predicting empty sets after the first error.
+
+We define \emph{restart validity} to mean that, after any monitored error, the monitoring guarantee renews on the remaining horizon, conditional on the full history up to that error.
+For a mask $M\in\{0,1\}^{T}$ and an algorithm $\acal$, define the successive monitored error times by $\sigma_0^{M}\coloneqq 0$ and, for $j\ge 0$,
+\begin{equation*}
+  \sigma_{j+1}^{M}
+  \coloneqq
+  \inf\left\{t > \sigma_{j}^{M} \colon M_t=1,\ \err_t(\acal)=1 \right\},
+\end{equation*}
+with $\inf\emptyset=\infty$.
+Let $\mathcal{I}_t\coloneqq \sigma(\F_t,\mathcal{H}_t)$ denote the full filtration including the algorithmic randomness.
+
+\begin{definition}[Restart validity]
+  \label{def:restart-valid}
+  Fix $\alpha\in(0,1)$.
+  An algorithm $\acal$ is \emph{restart-valid at level $\alpha$} over $\mcal$ if, for every $M\in\mcal$, every $j\ge 0$, and every $s\in\{0,\dots,T-1\}$,
+  \begin{equation*}
+    \prob(\sigma_{j+1}^{M}\le T \mid \mathcal{I}_s)
+    \le \alpha
+    \qquad \text{almost surely on }\{\sigma_j^{M}=s\}.
+  \end{equation*}
+  When $\mcal=\{M\}$ is a singleton, we write $\sigma_j$ instead of $\sigma_j^{M}$.
+\end{definition}
+
+An immediate consequence is that the number of errors incurred by a restart-valid algorithm exhibits geometric decay.
+
+\begin{proposition}[Geometric decay of repeated errors]
+  \label{prop:geom-decay}
+  If an algorithm $\acal$ is restart-valid at level $\alpha$ over $\mcal$, then for every mask $M\in\mcal$ the successive monitored error times satisfy $\prob(\sigma_k^{M}\le T)\le \alpha^k$ for all integers $k\ge 1$.
+\end{proposition}
+
+With the information model and restart validity in place, we identify two desiderata for sequential monitoring algorithms and demonstrate that wealth-based procedures fail both.
+
+The first desideratum is restart validity itself (Definition~\ref{def:restart-valid}): after any coverage failure at a monitored time, the algorithm must remain valid over $\mcal_0$ on the remaining horizon.
+Ville's inequality controls a one-time boundary crossing and is silent about what happens after that crossing, so wealth-based procedures cannot provide restart validity without substantial adaptation.
+
+\begin{proposition}[Wealth-based anytime-validity is not restart-valid]
+  \label{prop:wealth-not-restart}
+  There exist wealth-based procedures that are anytime-valid at level $\alpha$ but are not restart-valid for the all-ones mask.
+\end{proposition}
+
+In contrast, restart-validity is free for deterministic schedules under independent batch $p$-values.
+
+\begin{proposition}[Open-loop restart-validity is automatic]
+  \label{prop:open-loop-restart}
+  Assume Proposition~\ref{prop:iid-pvalues} and fix a deterministic schedule $(\tau_t)_{t=1}^T$.
+  If the schedule is mask-valid at level $\alpha$ over a family $\mcal_0$, then it is multi-mask restart-valid at level $\alpha$ with respect to $\mcal_0$.
+\end{proposition}
+
+\begin{remark}[Restart-validity is free for open-loop design]
+  In log-budget variables, standard validity for a deterministic schedule requires $\sum_{t\in S(M)} s_t\le L$ for each monitored set $S(M)$.
+  Restart-validity requires the same inequality for every suffix of $S(M)$.
+  Since each $s_t\ge 0$, the suffix constraints are redundant once the full-sum constraint holds.
+  Thus, imposing restart-validity does not change the deterministic open-loop feasible set.
+\end{remark}
+
+\label{sec:calibration-measurability}
+
+The second requirement is that each map $\acal_t$ be $\G_{t-1}$-measurable: the prediction sets depend only on past calibration data, not on realized test labels.
+From a practical standpoint, test labels are often delayed or unavailable, yet wealth-based procedures require the realized $E_t$ to update $W_t$.
+From a structural standpoint, Proposition~\ref{prop:iid-pvalues} shows that $p_t$ is independent of $\F_{t-1}$; using past test outcomes to set thresholds therefore injects artificial dependence into a naturally independent process.
+
+We combine the two desiderata into a single definition.
+
+\begin{definition}[Admissible algorithm]
+  \label{def:admissible}
+  Fix $\alpha\in(0,1)$, a horizon $T\in\N$, and a mask family $\mcal_0\subseteq\{0,1\}^T$.
+  A sequential monitoring algorithm $\acal$ is \emph{admissible} at level $\alpha$ over $\mcal_0$ if: (1) $\acal$ is restart-valid at level $\alpha$ over $\mcal_0$, and (2) $\acal$ is restricted closed-loop, i.e., $\acal_t$ depends only on past and current calibration data and internal randomness.
+\end{definition}
+
+Under both desiderata, the algorithm class collapses to deterministic (or $\G$-adapted) open-loop schedules.
+Proposition~\ref{prop:open-loop-restart} shows that any mask-valid deterministic schedule automatically satisfies desideratum~1.
+Desideratum~2 excludes closed-loop dependence on test outcomes, reflecting the practical setting where test labels are delayed or unavailable.
+Accordingly, in the remainder we focus on scheduling policies that operate through predictable threshold sequences $(\tau_t)$ based on calibration data and internal randomness.
+Having defined this admissible class, we now turn to optimal scheduling.
+
+\section{Optimal Scheduling}
+\label{sec:finite}
+
+In this section, we construct admissible mask-valid policies for an arbitrary mask family $\mcal_0$. We parameterize policies by a sequence of thresholds $(\tau_t)_{t=1}^{T}$ and define the prediction set as $\acal_t(X_t) = \{y \in \ycal : p_t(X_t, y) > \tau_t\}$. We fix an upper bound $\tau_{\max}\in(0,1)$ and restrict to $\tau_t\in[0,\tau_{\max}]$; define the corresponding log-budget bound $s_{\max}\coloneqq -\log(1-\tau_{\max})$. This ensures that the log-budget coordinates $s_t\coloneqq -\log(1-\tau_t)$ lie in the compact interval $[0,s_{\max}]$. For split conformal $p$-values with $n$ calibration points, one convenient choice is $\tau_{\max}=n/(n+1)$, the largest grid threshold strictly below $1$. The choice of $\tau_t$ controls the trade-off between set size and failure probability, which we encode through per-time expected costs $(c_t(\tau))_{t=1}^{T}$.
+
+For our deterministic threshold schedule, the masked failure event $F_T(M, \acal)$ defined in Section~\ref{sec:setup} has probability $\prob(F_T(M, \acal)) = 1-\prod_{t\in S(M)}(1-\tau_t)$.
+
+Given per-time expected costs $(c_t)_{t=1}^{T}$, the open-loop design problem to ensure mask-validity at level $\alpha\in(0,1)$ over the family $\mcal_{0}$ is
+
+\begin{equation}
+  \label{eq:design-problem}
+  \begin{aligned}
+    \min_{0 \le \tau_{1},\dots,\tau_{T}\le \tau_{\max}}\quad & \sum_{t=1}^{T} c_t(\tau_t)\\
+    \text{s.t.}\quad 1-\prod_{t\in S(M)}(1-\tau_t)\le  & \alpha,\quad \forall M\in\mcal_{0},
+  \end{aligned}
+\end{equation}
+
+When $\tau_t$ is restricted to the conformal grid $\{0,1/(n+1),\ldots,n/(n+1)\}$ (or its intersection with $[0,\tau_{\max}]$), the constraint is exact; for continuous $\tau_t$ it remains conservative.
+
+To simplify the product constraints, we apply a log transformation.
+Introduce $s_t:=-\log(1-\tau_t)$ and $L:=-\log(1-\alpha)$.
+The product constraints in \eqref{eq:design-problem} are then equivalent to a linear system of log-budget constraints $\sum_{t=1}^{T} M_t s_t \le L,\forall M\in\mcal_{0}$. Defining transformed costs $\tilde{c}_t(s):=c_t(1-\exp(-s))$, the open-loop design problem becomes a convex program
+\begin{equation}
+  \label{eq:design-problem-log}
+  \begin{aligned}
+    \min_{0 \le s_{1},\dots,s_{T}\le s_{\max}}\quad & \sum_{t=1}^{T} \tilde{c}_t(s_t)\\
+    \text{s.t.}\quad & \sum_{t=1}^{T} M_t s_t \le L,\qquad \forall M\in\mcal_{0}.
+  \end{aligned}
+\end{equation}
+This open-loop approach requires the cost functions to be perfectly known to the decision maker at deployment.
+Nonetheless, since the prediction set sizes are purely a function of the calibration data at each timestep, we can reliably compute these expected costs in many settings.
+We treat \eqref{eq:design-problem-log} as our core design primitive, which sets the stage for the dynamic setting.
+
+\subsection{Scheduling under Forecasted Costs}
+\label{sec:replanning}
+
+The open-loop schedule in \eqref{eq:design-problem-log} assumes that the expected costs $(c_t)$ are known at deployment.
+In practice, the mapping from conformal quantiles to expected prediction set sizes often must be learned over time.
+Moreover, as the data distribution shifts, the underlying cost functions may evolve.
+This motivates a closed-loop approach that dynamically responds to forecasted costs while still rigorously maintaining mask-validity.
+
+We treat the realized cost curves $(\tilde{c}_t)_{t=1}^{T}$ and the forecast array $(\hat{c}_{t,u})_{1 \le t \le u \le T}$ as fixed functions.
+At time $t$, before selecting the log-budget allocation $s_t$, the policy has access to forecasts $\hat{c}_{t,u}$ for all future stages $u\ge t$.
+After committing to $s_t$, the algorithm incurs the realized stage cost $\tilde{c}_t(s_t)$.
+All suboptimality gap statements we make will be pathwise with respect to these realized and forecast costs.
+
+To ensure that no mask constraint is overdrawn, we track the remaining log-budget for each mask $M\in\mcal_{0}$, defined as $b_t(M) := L - \sum_{u < t} M_u s_u$.
+The allocation $s_t$ must be chosen so that it does not exceed the remaining budget for any mask that includes stage $t$.
+This defines the one-step feasible interval:
+\begin{equation*}
+  \scalt(\mathbf{b}_t)
+  :=
+  [0,\ \min\{s_{\max},\ \inf_{M\in\mcal_{0}: M_t=1} b_t(M)\}].
+\end{equation*}
+
+If the true future costs were known, the optimal offline tail allocation from time $t$ onward would simply minimize the exact remaining sum of costs $\sum_{u=t}^T \tilde{c}_u(s_u)$ subject to the remaining budgets $b_t(M)$.
+Because we only have access to forecasts, our replanning algorithm instead minimizes the sum of the forecasted tail costs.
+
+Specifically, at each time $t$, the \emph{replanning policy} solves the forecasted tail problem from time $t$ onward for the vector $\hat{\bm{s}}_t = (\hat{s}_{t|t}, \dots, \hat{s}_{T|t})$:
+\begin{equation}
+  \label{eq:replan-action}
+  \hat{\bm{s}}_t \in \argmin_{\substack{0 \le s_{t:T} \le s_{\max}\\
+  \sum_{u=t}^{T} M_u s_u \le b_t(M),\ \forall M \in \mcal_0}}
+  \sum_{u=t}^{T} \hat{c}_{t,u}(s_u).
+\end{equation}
+The policy then commits exclusively to the immediate allocation $s_t = \hat{s}_{t|t}$, and updates the budgets $b_{t+1}(M)=b_t(M)-s_t M_t$.
+This is a sequential replanning rule: it repeatedly solves a forecasted tail problem but only commits to the first step.
+
+Since the true optimal costs are inaccessible and our forecasts may be inaccurate, the replanning sequence will generally incur higher costs than the offline optimum.
+However, because the policy is predictable and strictly enforces the log-budget constraints at every step, it always guarantees validity.
+
+\begin{proposition}[Validity of admissible replanning under pathwise feasibility]
+  \label{prop:replan-validity}
+  Assume Proposition~\ref{prop:iid-pvalues} and fix $\alpha\in(0,1)$.
+  Let $(\tau_t)_{t=1}^{T}$ be any policy such that each $\tau_t$ is $\mathcal{I}_{t-1}$-measurable, and write $s_t=-\log(1-\tau_t)$ and $L=-\log(1-\alpha)$.
+  If $\sum_{t=1}^{T} M_t s_t \le L$ almost surely for all $M\in\mcal_{0}$, then the policy is mask-valid at level $\alpha$ over $\mcal_{0}$.
+  Moreover, it is suffix-valid and restart-valid at the same level.
+\end{proposition}
+
+\subsection{Suboptimality Bounds}
+\label{sec:suboptimality}
+
+While the replanning policy is always valid by construction, its cost performance relative to the offline optimum depends heavily on forecast accuracy.
+We bound the suboptimality of the replanning policy compared to the optimal offline schedule computed with perfect hindsight of the realized costs.
+
+Instead of tracking abstract value-function errors, we can bound the suboptimality directly in terms of the uniform derivative forecast errors, defined as $e_{t,u} := \sup_{s} |\tilde{c}_u'(s) - \hat{c}_{t,u}'(s)|$.
+For the all-ones mask, this yields a simple quadratic dependence on the tail-forecast errors.
+
+\begin{corollary}[Suboptimality for the all-ones mask, informal]
+  \label{cor:regret-allones-informal}
+  Under mild curvature and non-degeneracy conditions, the suboptimality gap of the replanning policy for the all-ones mask $\mcal_0 = \{\1\}$ is bounded by $O\left( \sum_{t=1}^{T-1} \bar{e}_{t,>t}^2 + \sum_{t=1}^{T} e_{t,t}^2 \right)$, where $\bar{e}_{t,>t}$ is the average forecast error for the tail stages.
+\end{corollary}
+
+The complete formal definitions, assumptions (including exact curvature bounds), and rigorous proofs are deferred to Appendix~\ref{app:replanning}.
+
+
+
+\section{Analysis of the Anytime Setting}
+\label{sec:ville}
+
+In this section, we study whether the wealth-based procedure produces informative prediction sets for longer than a simple alpha-spending schedule.
+A notable property of wealth-based procedures is that they do not require the horizon $T$ to be known in advance, a property not shared by the schedules in Section~\ref{sec:replanning}.
+Nonetheless, even without prior knowledge of $T$, using conformal $p$-values, it is generally possible to design a simple open-loop schedule that satisfies the anytime-style guarantee in Equation~\eqref{eq:mask_valid_norestart}.
+
+To compare the two approaches, we adopt a regression model $Y = f(X) + \varepsilon$ with scores $S(x, y) = (y - f(x))^2$. We assume these scores follow a Gamma distribution, generalizing the chi-squared distribution of Gaussian errors while providing a tractable model for squared-loss.
+
+\begin{assumption}[I.i.d.\ Gamma scores within and across batches]
+  \label{ass:gamma-scores}
+  For each time $t\ge 1$, let the $n$ calibration scores $S_{t,1}, \dots, S_{t,n}$ and the test score $S_{t,0} = S(X_{t}, Y_{t})$ satisfy
+  \begin{equation*}
+    S_{t,0}, S_{t,1}, \ldots, S_{t,n} \stackrel{\text{i.i.d.}}{\sim} \mathrm{Gamma}(a, \theta),
+  \end{equation*}
+  and assume independence across $t$.
+\end{assumption}
+
+Using the score-based e-value $E_t(x, y)$ from Section~\ref{sec:setup} and the conformal p-value $p_t(x, y)$ from \eqref{eq:pt-def}, we analyze set informativeness under Assumption~\ref{ass:gamma-scores}. $E_t$ denotes the realized e-value $E_t(X_t, Y_t)$ for the true label.
+
+Conformal sets become uninformative (vacuous) for p-values if the threshold $\tau_t < 1/(n+1)$. For the wealth process $W_t = \prod_{u=1}^t E_u$, sets become vacuous once $W_{t-1} < 1/(\alpha(n+1))$. We define the time-to-vacuity as $T_{\mathrm{full}} \coloneqq \inf\{t \ge 1 \colon W_{t-1} < 1/(\alpha(n+1))\}$.
+
+Fixing a constant calibration size $n \ge 1$ per batch, we analyze how fast the sets become uninformative under both approaches.
+For anytime monitoring with independent $p$-values, a deterministic open-loop schedule $(\tau_{t})_{t\ge 1}$ is anytime-valid at level $\alpha$ whenever $\sum_{t\ge 1} -\log(1-\tau_{t}) \le -\log(1-\alpha)$.
+A classical choice is a log-squared alpha-spending schedule, which assigns a deterministic log-budget $s_t$ that decays like $1/(t(\log(t))^2)$ and then sets $\tau_t=1-\exp(-s_t)$ so that $s_t=-\log(1-\tau_t)$ holds exactly.
+The following proposition gives an explicit anytime-valid schedule of this form and quantifies how long it remains informative on the conformal grid.
+
+\begin{proposition}[Log-squared alpha-spending schedule]
+  \label{prop:log2-spending}
+  Fix $\alpha\in(0,1)$ and let $L=-\log(1-\alpha)$.
+  Define the normalizing constant
+  \begin{equation}
+    \label{eq:Z-log2}
+    Z \coloneqq \sum_{t=1}^{\infty} \frac{1}{(t+1)(\log(t+1))^2}.
+  \end{equation}
+  For $t\ge 1$, set
+  \begin{equation*}
+    s_t \coloneqq \frac{L}{Z}\cdot \frac{1}{(t+1)(\log(t+1))^2},
+    \qquad
+    \tau_t \coloneqq 1-\exp(-s_t).
+  \end{equation*}
+  Then $\sum_{t\ge 1}-\log(1-\tau_t)=L$, so the schedule is anytime-valid at level $\alpha$ for independent conformal $p$-values.
+  Moreover, for every $n\ge 1$, the schedule is grid-informative for all times $t\le T_{\log^2}(n,\alpha)$, where
+  \begin{equation}
+    \label{eq:Tlog2}
+    T_{\log^2}(n,\alpha)
+    \coloneqq
+    \max\left\{0, \left\lfloor \frac{(L n)/Z}{(\log(2+(L n)/Z))^2}\right\rfloor - 1\right\}.
+  \end{equation}
+  In particular, $T_{\log^2}(n,\alpha)=\Omega\bigl(n/(\log(n))^2\bigr)$.
+\end{proposition}
+
+Proposition~\ref{prop:log2-spending} shows that a natural anytime-valid open-loop schedule remains informative on the conformal grid for $\Omega(n/(\log(n))^2)$ steps despite the infinite horizon.
+
+To bound $T_{\mathrm{full}}$, we first characterize the exact distribution of the score-based e-values.
+
+\begin{lemma}[Exact law of score-based e-values under Gamma scores]
+  \label{lem:beta-law}
+  Under Assumption~\ref{ass:gamma-scores},
+  \begin{equation*}
+    \frac{E_{t}}{n+1} \sim \mathrm{Beta}(a,na),
+    \qquad \text{i.i.d.\ across }t.
+  \end{equation*}
+  Moreover, for any $q>-a$,
+  \begin{equation}
+    \label{eq:Eq-moment}
+    \expec[E_{t}^q]
+    =
+    (n+1)^q\frac{\Gamma(a+q)\Gamma((n+1)a)}{\Gamma(a)\Gamma((n+1)a+q)}.
+  \end{equation}
+\end{lemma}
+
+Using this exact law, we establish that the wealth process collapses to a vacuous state exponentially faster than the open-loop $p$-value schedule.
+
+\begin{theorem}[Time-to-vacuity bound for score-e-value wealth]
+  \label{thm:Tfull-bound}
+  Under Assumption~\ref{ass:gamma-scores}, let $T_{\mathrm{full}}$ be the time-to-vacuity for the wealth process.
+  Fix any $q\in(0,1)$ and define $c_{a,q,n}\coloneqq \expec[E_{1}^q]$.
+  Then for every $t\ge 1$,
+  \begin{equation}
+    \label{eq:Tfull-tail}
+    \prob(T_{\mathrm{full}}>t)
+    \le (\alpha(n+1))^q c_{a,q,n}^{t-1}.
+  \end{equation}
+  Moreover, $c_{a,q,n}\to c_{a,q}\coloneqq \Gamma(a+q)/(\Gamma(a)a^q) \in (0,1)$ as $n\to\infty$.
+  Consequently, for fixed $\alpha\in(0,1)$, $T_{\mathrm{full}}=O(\log n)$ with high probability.
+\end{theorem}
+
+This theorem quantifies a discrete-grid inefficiency: even in a stationary parametric score model with i.i.d.\ increments and bounded e-values, multiplicative wealth shrinks rapidly and, via Ville inversion, forces the prediction set to become the full label space after only $O(\log n)$ steps with high probability.
+In contrast, the open-loop log-budget formulation permits $\Omega(n/(\log(n))^2)$ grid-informative steps under the same anytime risk level $\alpha$ by Proposition~\ref{prop:log2-spending}.
+Proofs are deferred to Appendix~\ref{app:proofs_5}.
+
+
+
+
+
+
+
+\section{Experiments}
+\label{sec:experiments}
+
+We evaluated Anyhow CP against the batch anytime-valid baseline of~\citet{gauthier2025values} on two standard benchmarks, one regression and one classification, under both stationary and drifting conditions.
+All experiments used $\alpha = 0.1$ and were repeated over $20$ independent runs per configuration.
+
+\subsection{Experimental setup}
+\label{sec:exp-setup}
+
+We use California Housing~\citep{california_housing} for regression and CIFAR-10~\citep{cifar10} for classification.
+We consider both stationary (no drift) and drifting conditions; full dataset and drift details are in Appendix~\ref{app:datasets}.
+
+% \paragraph{Datasets and predictors.}
+% The proposed method was evaluated on two standard benchmarks, one regression, and one classification, under both stationary, and drifting conditions.
+
+% \emph{\textbf{Regression} - California Housing.} \\
+% We used the California Housing dataset~\citep{california_housing}, which contains $20{,}640$ census tract observations with $8$ geographic and demographic features and a continuous target (median house value, in units of \$100{,}000).
+% A Gradient Boosted Regressor (GBR) was trained on a random $70\%$ split ($14{,}448$ samples) and the remaining $30\%$ ($6{,}192$ samples) were reserved for sequential evaluation.
+% At deployment, the held-out data were partitioned into $T = 35$ consecutive batches; each batch was further divided into a calibration subset and a single test point.
+% The nonconformity score was the absolute residual $S(x,y) = |y - f(x)|$.
+
+% \emph{\textbf{Classification} - CIFAR-10.} \\
+% We used the CIFAR-10 benchmark~\citep{cifar10}, which consists of $50{,}000$ training and $10{,}000$ test images across $10$ balanced classes.
+% A ResNet-18~\citep{resnet18}, pre-trained on ImageNet~\citep{imagenet}, was fine-tuned on the CIFAR-10 training set for $10$ epochs with its final fully connected layer replaced to match the $10$-class output space.
+% The $10{,}000$ test images were partitioned into $T = 35$ sequential batches; as in the regression setting, each batch provided a calibration set and exactly one test point.
+% The nonconformity score follows the log-inverse-probability construction of~\citet{gauthier2025values}:
+% \begin{equation}
+%   \label{eq:clf-score}
+%   S(x, k)
+%   = \frac{1}{\bigl(\log(1 + p_f(k \mid x))\bigr)^{1/4}},
+% \end{equation}
+% where $p_f(k \mid x)$ is the softmax probability of class $k$ under the fine-tuned network.
+% The $\log(1+p)$ transformation ensures that $S > 1$ for all $p \in (0,1]$, preventing the product-martingale of the e-value baseline from collapsing prematurely across batches.
+% The calibration score for a labeled point $(x_i, y_i)$ is $S(x_i, y_i)$, and the candidate scores for an unlabeled test point $x$ are the full vector $(S(x,k))_{k=1}^{10}$.
+
+% \paragraph{Batch structure.}
+% Both tasks shared the same sequential protocol, reflecting the framework of Section~\ref{sec:batch}.
+% At each timestep $t \in \{1, \dots, 35\}$, a batch arrives containing $m_t$ labeled calibration points $(X_{t,i}, Y_{t,i})$ and a single unlabeled test feature $X_{t,n_t}$.
+% Within-batch exchangeability (Assumption of Section~\ref{sec:batch}) holds by construction: in the stationary setting the batch is an i.i.d.\ draw from a fixed distribution, and in the drift setting (described below) the shift is applied identically to all points in the batch before the conformal scores are computed, so the ranks remain exchangeable within the batch.
+
+% \paragraph{Distribution drift.}
+
+% To assess robustness under non-stationary conditions, we introduce gradual, batch-progressive drift that preserves within-batch exchangeability.
+% In all drift experiments, the shift magnitude at batch $t$ is proportional to the progress fraction $\rho_t = (t-1)/(T-1) \in [0,1]$, so the distribution is unperturbed at $t = 1$ and maximally shifted at $t = T$.
+
+% \emph{No-drift setting (ND).}
+% Batches are drawn i.i.d. from the held-out partition with no modification.
+% This is the canonical exchangeable setting in which conformal guarantees hold unconditionally.
+
+% \emph{Drift setting (D).}
+% Two complementary drift mechanisms are applied simultaneously.
+
+% \begin{itemize}
+%   \item \textbf{Regression.}
+%     \emph{Covariate drift}: all $8$ input features are shifted by a constant offset $0.5 \cdot \rho_t$, simulating a gradual change in the census-tract covariate distribution.
+%     \emph{Target drift}: independent Gaussian noise $\varepsilon \sim \mathcal{N}(0,\, (0.3 \cdot \rho_t)^2)$ is added to the house-value target, so the label noise standard deviation grows from zero at batch $1$ to $0.3$ at batch $T = 35$.
+
+%   \item \textbf{Classification.}
+%     \emph{Covariate drift}: pixel brightness is increased by $0.5 \cdot \rho_t$ (with values clipped to $[0,1]$), degrading input quality progressively.
+%     \emph{Label drift}: a fraction $0.3 \cdot \rho_t$ of labels in each batch are uniformly flipped to a randomly chosen different class, introducing increasing annotation noise.
+% \end{itemize}
+
+% Both mechanisms were applied before computing conformal scores, so the test statistic and calibration scores in any given batch remain jointly exchangeable.
+% The drift therefore tests how each method responds to a deteriorating data-generating process without voiding the fundamental structural assumption of Section~\ref{sec:batch}.
+
+% \paragraph{Methods.}
+% We compared two methods with a target miscoverage level $\alpha = 0.1$.
+
+\textbf{Anytime CP}~\citep{gauthier2025values}.
+Conformal e-values are combined via a product-martingale; Ville's inequality (Section~\ref{sec:setup}) controls the probability of ever making a monitored error.
+Thresholds are random, adapted to the accumulated wealth $W_{t-1}$, and therefore unpredictable at deployment.
+
+\textbf{Anyhow CP (all-ones)}.
+The log-budget program \eqref{eq:design-problem-log} is solved under the all-ones mask $\mcal_0 = \{\mathbf{1}\}$, distributing the budget $L = -\log(1-\alpha)$ uniformly across $T = 35$ steps.
+Thresholds are fixed before deployment.
+This is equivalent to the deterministic baseline in which the budget is split evenly, as in~\citet{gauthier2025values}.
+
+\subsection{Results}
+\label{sec:results}
+
+Table~\ref{tab:results} reports the window failure rate (W) and mean set size (S) with standard deviation, aggregated over $20$ independent runs.
+The window failure rate is the fraction of audit windows that experience at least one miscoverage; for the all-ones mask (single window = entire horizon), W equals the fraction of runs with at least one error.
+
+\begin{table*}[t]
+  \centering
+  \caption{%
+    Results on California Housing (regression) and CIFAR-10 (classification) under no-drift (ND) and drift (D) conditions.
+    % $T = 35$ batches, $\alpha = 0.1$, $20$ runs per configuration.
+    \textbf{W}: window failure rate (fraction of windows with at least one miscoverage).
+    \textbf{S}: mean prediction set size (interval width for regression; set cardinality for classification); $\pm$ denotes standard deviation across runs.
+    % Anyhow methods use deterministic open-loop thresholds; the Anytime baseline uses a random wealth-based threshold.%
+  }
+  \label{tab:results}
+  % \small
+  % \setlength{\tabcolsep}{4.5pt}
+  % \begin{tabular}{@{}l|cc|cc|cc|cc@{}}
+  %   \toprule
+  %   & \multicolumn{2}{c|}{Reg.\ ND}
+  %   & \multicolumn{2}{c|}{Reg.\ D}
+  %   & \multicolumn{2}{c|}{Clf.\ ND}
+  %   & \multicolumn{2}{c}{Clf.\ D}                                                                                                                    \\
+  %   \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+  %   Method                  & W    & S            & W    & S            & W    & S               & W    & S             \\
+  %   \midrule
+  %   Anytime                 & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$   & $0.00{\pm}X$ & $0.00{\pm}X$ \\
+  %   Anyhow (all-ones)       & $0.00{\pm}X$ & $0.00{\pm}X$          & $0.00{\pm}X$ & $0.00{\pm}X$          & $0.00{\pm}X$ & $0.00{\pm}X$              & $0.00{\pm}X$ & $0.00{\pm}X$            \\
+  %   \bottomrule
+  % \end{tabular}
+    % \label{tab:results}
+    
+% \begin{tabular}{@{}l|cc|cc|cc|cc@{}}
+%   \toprule
+%   & \multicolumn{2}{c|}{Reg.\ ND}
+%   & \multicolumn{2}{c|}{Reg.\ D}
+%   & \multicolumn{2}{c|}{Clf.\ ND}
+%   & \multicolumn{2}{c}{Clf.\ D} \\
+%   \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+%   Method            & W & S & W & S & W & S & W & S \\
+%   \midrule
+%   Anytime           & -- & $0.00{\pm}X$ & -- & $0.00{\pm}X$ & -- & $0.00{\pm}X$ & -- & $0.00{\pm}X$ \\
+%   Anyhow (all-ones) & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ \\
+%   Anyhow (win. K=1) & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ \\
+%   Anyhow (win. K=3) & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ \\
+%   Anyhow (win. K=5) & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ & $0.00{\pm}X$ \\
+%   \bottomrule
+% \end{tabular}
+
+\small
+\begin{tabular}{@{}l|cc|cc|cc|cc@{}}
+  \toprule
+  & \multicolumn{2}{c|}{Reg.\ ND}
+  & \multicolumn{2}{c|}{Reg.\ D}
+  & \multicolumn{2}{c|}{Clf.\ ND}
+  & \multicolumn{2}{c}{Clf.\ D} \\
+  \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+  Method            & W & S & W & S & W & S & W & S \\
+  \midrule
+  Anytime                   & -- & $287{\pm}45$ & -- & $289{\pm}42$ & -- & $7.3{\pm}3.7$ & -- & $9.6{\pm}1.6$ \\
+  Anyhow (all-ones)         & $0.0{\pm}0.0$ & $300{\pm}0$ & $0.0{\pm}0.0$ & $300{\pm}0$ & $0.0{\pm}0.0$ & $10{\pm}0$ & $0.0{\pm}0.0$ & $10{\pm}0$ \\
+  Anyhow (win. K=1)         & $0.09{\pm}0.04$ & $60{\pm}10$ & $0.08{\pm}0.05$ & $127{\pm}31$ & $0.10{\pm}0.05$ & $0.95{\pm}0.23$ & $0.07{\pm}0.04$ & $4.1{\pm}2.8$ \\
+  Anyhow (win. K=3)         & $0.11{\pm}0.08$ & $95{\pm}21$ & $0.10{\pm}0.08$ & $183{\pm}39$ & $0.07{\pm}0.08$ & $1.18{\pm}0.57$ & $0.02{\pm}0.03$ & $7.1{\pm}3.3$ \\
+  Anyhow (win. K=5)         & $0.06{\pm}0.09$ & $146{\pm}41$ & $0.04{\pm}0.07$ & $225{\pm}38$ & $0.05{\pm}0.09$ & $1.54{\pm}1.41$ & $0.04{\pm}0.07$ & $8.2{\pm}2.9$ \\
+  Anyhow replan (all-ones)  & $0.0{\pm}0.0$ & $287{\pm}37$ & $0.0{\pm}0.0$ & $296{\pm}20$ & $0.05{\pm}0.22$ & $9.7{\pm}1.6$ & $0.1{\pm}0.3$ & $9.8{\pm}1.2$ \\
+  Anyhow replan (win. K=1)  & $0.08{\pm}0.05$ & $60{\pm}10$ & $0.07{\pm}0.04$ & $127{\pm}31$ & $0.08{\pm}0.04$ & $1.0{\pm}0.3$ & $0.04{\pm}0.03$ & $4.2{\pm}2.8$ \\
+  Anyhow replan (win. K=3)  & $0.10{\pm}0.09$ & $99{\pm}24$ & $0.10{\pm}0.09$ & $191{\pm}41$ & $0.04{\pm}0.06$ & $3.9{\pm}4.1$ & $0.04{\pm}0.05$ & $7.4{\pm}3.2$ \\
+  Anyhow replan (win. K=5)  & $0.09{\pm}0.11$ & $144{\pm}45$ & $0.07{\pm}0.08$ & $218{\pm}38$ & $0.07{\pm}0.11$ & $6.5{\pm}4.3$ & $0.07{\pm}0.11$ & $8.5{\pm}2.7$ \\
+  \bottomrule
+\end{tabular}
+
+  \label{tab:results}
+\end{table*}
+
+
+
+% \paragraph{Coverage validity and the monitoring target.}
+% All methods maintain empirical marginal coverage (C) at or above the nominal $1 - \alpha = 0.90$ level across both tasks and both settings, consistent with the guarantee of Proposition~\ref{prop:iid-pvalues}.
+% Mean coverage alone, however, is an insensitive diagnostic: it averages over both the magnitude and the timing of errors.
+% The full-run coverage fraction (F) is sharper, as it measures whether any monitored error occurs over the entire horizon.
+% In the stationary setting, Anytime CP achieves $\mathrm{F} = 1.00$ on both tasks, indicating that no miscoverage event is observed in any of the $20$ runs: a sign of conservatism rather than tightness.
+% Under regression drift, Anytime CP drops to $\mathrm{F} = 0.90$, which corresponds precisely to the $\alpha = 0.10$ theoretical limit: the method is no longer conservative and is performing at the boundary of its guarantee.
+% This degradation is mechanistic: a sustained increase in nonconformity scores, driven by covariate and target drift, exhausts the martingale wealth faster than the Ville boundary anticipates, causing occasional errors in roughly one run in ten.
+% Anyhow methods do not share this vulnerability: because their thresholds are fixed before deployment, there is no wealth process to deplete, and any change in F under drift is driven solely by how the fixed threshold interacts with the shifted score distribution, not by a reactive threshold that shrinks in response to past errors.
+
+% \paragraph{Efficiency and set sizes.}
+% For classification, Anytime CP yields smaller sets than Anyhow (all-ones) in the no-drift setting ($\mathrm{S}=6.4$ vs.\ $10$), while both methods approach the full label space under drift ($9.8$ vs.\ $10$).
+% For regression, both methods are close to the empirical maximum interval width, with Anytime CP yielding slightly smaller sets on average ($292$ vs.\ $300$ in ND).
+
+% \paragraph{Grid effects in regression.}
+% The Anyhow (all-ones) schedule uses the uniform log-budget allocation $s_t = L/T$, corresponding to $\tau_t = 1-\exp(-L/T)$.
+% When the calibration size $m_t$ is modest, this target threshold can fall below the conformal grid spacing $1/(m_t+1)$, effectively rounding the implemented threshold down to $0$ and yielding the full empirical score range.
+% Heavy-tailed residual scores amplify this discretization: moving up by one grid point in the upper tail can cause a large jump in interval width.
+
+% \paragraph{Drift robustness and risk concentration.}
+% Under drift, empirical set sizes increase uniformly across all methods and both tasks, as the test nonconformity score drifts away from the calibration distribution.
+% The effect is more pronounced for classification, where covariate corruption and label noise jointly degrade the model's probability estimates.
+% A counterintuitive consequence is that $\mathrm{F}$ can \emph{improve} under drift: as set sizes inflate, the probability that the true label is excluded at any single step decreases, so full-run coverage becomes easier to maintain even as individual sets become less informative.
+% This asymmetry highlights a key property of Anyhow CP: distributional shift may reduce the \emph{utility} of the prediction sets by increasing their size, but it cannot jeopardize their \emph{safety}, because the validity guarantee is anchored to the within-batch rank structure and not to the magnitude of the scores.
+% The Anytime baseline, by contrast, ties threshold selection to realized wealth, making its safety contingent on the stationarity of the nonconformity score distribution, a dependence that our framework eliminates by construction.
+
+\section{Discussion}
+\label{sec:discussion}
+Mask-valid conformal prediction replaces anytime monitoring by a family of structured monitoring rules specified ex ante, while treating the realized mask as unobserved online.
+In the batched sequential model under conditional exchangeability, randomized conformal $p$-values are grid-uniform conditional on the past, which implies independence from the past and i.i.d.\ $p$-values across time even without batch independence.
+This i.i.d.\ structure yields an exact finite-horizon evaluation formula and a log-budget reduction of mask-validity to linear constraints.
+Computational aspects of large mask families are deferred.
+Appendix~\ref{app:replanning} provides the complete proofs underlying the replanning bounds, and the section-specific appendices provide other proofs deferred from the main text.
+
+\bibliography{references}
+\appendix
+\onecolumn
+
+\section*{Organization of the Appendix}
+This appendix is organized as follows:
+\begin{itemize}
+  \item Appendix~\ref{app:proofs_2_3} provides proofs deferred from Sections~2 and~3.
+  \item Appendix~\ref{app:proofs_4} provides proofs deferred from Section~4.
+  \item Appendix~\ref{app:proofs_5} provides proofs for Section~5.
+  \item Appendix~\ref{app:datasets} highlights the experimental setup.
+  \item Appendix~\ref{app:add_experiments} contains additional experiments.
+\end{itemize}
+
+\section{Proofs of Sections 2 and 3}
+\label{app:proofs_2_3}
+
+\begin{proof}[Proof of Proposition~\ref{prop:wealth-not-restart}]
+  Fix $\alpha\in(0,1)$.
+  Choose an integer $n\ge \lceil 1/\alpha\rceil$ and take a horizon $T\ge 2$ large enough that $1-(1/(n+1))^{T-1}>\alpha$.
+  Consider the all-ones mask $M_t\equiv 1$ and a simple wealth-based process with all-in betting $\lambda_t\equiv 1$ and e-value increments
+  \begin{equation*}
+    E_1 := (n+1)\ind{p_1\le 1/(n+1)},
+    \qquad
+    E_t := 1,\quad t\ge 2.
+  \end{equation*}
+  Under Proposition~\ref{prop:iid-pvalues}, $\expec[E_1]=(n+1)\prob(p_1\le 1/(n+1))=1$, so $(W_t)_{t\ge 0}$ with $W_t=\prod_{u=1}^{t}E_u$ is a nonnegative martingale.
+  Moreover, $\{W_1\ge 1/\alpha\}$ coincides with $\{p_1\le 1/(n+1)\}$ because $n+1\ge 1/\alpha$, and thus
+  \begin{equation*}
+    \begin{aligned}
+      \prob\left(\sup_{t\ge 1} W_t \ge \frac{1}{\alpha}\right)
+      &= \prob(W_1\ge 1/\alpha)\\
+      &= \prob(p_1\le 1/(n+1))\\
+      &= \frac{1}{n+1}\\
+      &\le \alpha.
+    \end{aligned}
+  \end{equation*}
+
+  Define the associated threshold policy by $\tau_1:=1/(n+1)$ and, for $t\ge 2$,
+  \begin{equation*}
+    \tau_t :=
+    \begin{cases}
+      n/(n+1) & \text{if } W_{t-1}\ge 1/\alpha,\\
+      0 & \text{otherwise.}
+    \end{cases}
+  \end{equation*}
+  This policy is anytime-valid at level $\alpha$ since any error implies $p_1\le 1/(n+1)$ and therefore
+  $\prob(\sigma_1\le T)=1/(n+1)\le \alpha$.
+
+  However, conditional on $\sigma_1=1$ the thresholds satisfy $\tau_t=n/(n+1)$ for all $t\in\{2,\dots,T\}$, so by Proposition~\ref{prop:iid-pvalues},
+  \begin{equation*}
+    \begin{aligned}
+      \prob(\sigma_2\le T\mid \sigma_1=1)
+      &= 1-\prod_{t=2}^{T}\left(1-\frac{n}{n+1}\right)\\
+      &= 1-\left(\frac{1}{n+1}\right)^{T-1}\\
+      &> \alpha,
+    \end{aligned}
+  \end{equation*}
+  which violates restart-validity.
+\end{proof}\par\medskip
+
+\begin{proof}[Proof of Proposition~\ref{prop:open-loop-restart}]
+  Write $s_t=-\log(1-\tau_t)\ge 0$ and $L=-\log(1-\alpha)$.
+  Mask-validity of a deterministic schedule is equivalent to the log-budget constraints $\sum_{t=1}^{T} M_t s_t\le L$ for all $M\in\mcal_0$.
+  Since each $s_t$ is nonnegative, for every $s\in\{0,\dots,T-1\}$ we also have the suffix bound $\sum_{t=s+1}^{T} M_t s_t\le L$.
+
+  Fix $M\in\mcal_0$ and $s\in\{0,\dots,T-1\}$.
+  By Proposition~\ref{prop:iid-pvalues}, conditional on $\mathcal{I}_s$ the future monitored conformal $p$-values are independent and super-uniform.
+  Therefore,
+  \begin{equation*}
+    \prob\Big(\exists t>s\colon M_t=1,\ \err_t(\acal)=1 \Big| \mathcal{I}_s\Big)
+    \le 1-\prod_{t=s+1}^{T} (1-\tau_t)^{M_t}
+    = 1-\exp\Big(-\sum_{t=s+1}^{T} M_t s_t\Big)
+    \le 1-\exp(-L)
+    = \alpha.
+  \end{equation*}
+  Since this bound holds for every $s$, it holds in particular almost surely on each event $\{\sigma_j^{M}=s\}$.
+  On this event, $\{\exists t>s\colon M_t=1,\ \err_t(\acal)=1\}=\{\sigma_{j+1}^{M}\le T\}$, which is Definition~\ref{def:restart-valid}.
+\end{proof}\par\medskip
+
+\begin{proof}[Proof of Proposition~\ref{prop:iid-pvalues}]
+  Fix an arbitrary time $t \ge 1$ and test point $(X_t, Y_t) \in \scaltest^t$. Conditional on $\fcal_{t-1}$, $(X_t, Y_t)$ is exchangeable with the $n$ points in $\scalcal^t$ and the score function $s_t$ is deterministically fixed. Assuming unique scores, the conditional rank of $s_t(X_t, Y_t)$ among all $n+1$ points is uniformly distributed on $\{1, \dots, n+1\}$~\citeneeded[Shafer \& Vovk (2008) "A Tutorial on Conformal Prediction": Rank-uniformity of conformity scores under exchangeability].
+  Thus, $p_t(X_t, Y_t)$ is conditionally uniform on $\{1/(n+1), \dots, 1\}$.
+  Because this conditional distribution is purely deterministic and does not depend on $\fcal_{t-1}$, $p_t(X_t, Y_t)$ is fully independent of $\fcal_{t-1}$.
+  Finally, iterating the tower property and leveraging the fact that $(p_1, \dots, p_{t-1})$ is fully $\fcal_{t-1}$-measurable rigorously guarantees complete mutual independence of the conformal $p$-values across all batches.
+\end{proof}
+
+\section{Deferred Results and Proofs of Section 4}
+\label{app:proofs_4}
+
+\subsection{Notations, Preliminaries, Assumptions, and Duality}
+\label{app:replanning}
+
+This appendix provides the formal definitions and complete proofs underlying the suboptimality bounds for the replanning policy.
+We begin by establishing the formal notation, assumptions, and duality properties.
+Then we state the general suboptimality theorem, and finally provide a specialized bound for the all-ones mask.
+
+\subsubsection{Notation and Setup}
+\label{app:replanning-prelim}
+
+We work in the log-budget coordinate $s_t := -\log(1-\tau_t) \in [0, s_{\max}]$, where $s_{\max} := -\log(1-\tau_{\max})$.
+Conceptually, our framework assigns an initial log-budget $L$ to every mask $M \in \mcal_0$. At each timestep $u$, a scheduling policy allocates a log-budget $s_u$, which is subtracted from the available budget of any mask $M$ that covers timestep $u$ (i.e., when $M_u = 1$).
+Therefore, after allocating $s_1, \dots, s_{t-1}$, the remaining budget at time $t$ for a mask $M \in \mcal_{0}$ is $b_t(M) := L - \sum_{u < t} M_u s_u$.
+Let $\mathbf{b}_t := (b_t(M))_{M \in \mcal_{0}} \in \R^{|\mcal_{0}|}$ denote the state vector tracking the remaining budgets for all masks, with initial state $\mathbf{b}_1 = L\1$, where $\1$ is the all-ones vector.
+The mask-incidence direction at time $t$ is the vector $\mathbf{m}_t := (M_t)_{M \in \mcal_{0}} \in \{0,1\}^{|\mcal_{0}|}$, yielding the state transition $\mathbf{b}_{t+1} = \mathbf{b}_t - s_t \mathbf{m}_t$.
+For $\mathbf{b} \in \R_{\ge 0}^{|\mcal_{0}|}$, the one-step feasible set is the interval $\scalt(\mathbf{b}) := [0, \min\{s_{\max}, \inf_{M\in\mcal_{0}: M_t = 1} b(M)\}]$, which prevents any active mask's budget from becoming negative.
+
+We define the remaining offline value function as
+\begin{equation}
+  \label{eq:value-function}
+  V_t(\mathbf{b})
+  := \min_{\substack{0 \le s_{t:T} \le s_{\max} \\
+  \sum_{u=t}^{T} M_u s_u \le b(M),\ \forall M \in \mcal_{0}}}
+  \sum_{u=t}^{T} \tilde{c}_u(s_u),
+\end{equation}
+with terminal condition $V_{T+1}(\cdot) = 0$.
+Similarly, for each planning time $t$, the forecasted value function $\hat{V}_{u \mid t}(\mathbf{b})$ is defined by replacing $\tilde{c}_v$ with the forecast $\hat{c}_{t,v}$ in \eqref{eq:value-function} for stages $v \ge u$, with $\hat{V}_{T+1 \mid t}(\cdot)=0$.
+Under these definitions, the replanning action from Equation~\eqref{eq:replan-action} can be equivalently written as
+\begin{equation}
+  \label{eq:replan-action-value}
+  s_t \in \argmin_{s \in \scalt(\mathbf{b}_t)} \left[ \hat{c}_{t,t}(s) + \hat{V}_{t+1 \mid t}(\mathbf{b}_t - s\mathbf{m}_t) \right].
+\end{equation}
+
+The realized costs $\tilde{c}_u$, the forecasts $\hat{c}_{t,u}$, and the replanning policy follow Section~\ref{sec:finite}. We define the uniform forecast error as $e_{t,u} := \sup_{s\in[0,s_{\max}]} |\tilde{c}_u'(s) - \hat{c}_{t,u}'(s)|$. In addition, we define the subgradient error
+\begin{equation*}
+  \eta_t(s) \coloneqq \sup\ens{|\hat{g}_c-g_c|: \hat{g}_c \in \partial \hat{c}_{t,t}(s),  g_c \in \partial \tilde{c}_t(s)},
+\end{equation*}
+and let $\eta_t:=\sup_{s\in[0,s_{\max}]}\eta_t(s)$.
+
+For any step $t$, let $\mcal_{0}^{\mathrm{tail}}(t):=\{M\in\mcal_{0}:\ \sum_{u=t}^{T} M_u>0\}$ denote the masks that remain active in the tail.
+Define the tail-interior region
+\begin{equation*}
+  \bcal_{t}^{\circ} := \left\{\mathbf{b}\in[0,L]^{|\mcal_{0}|} : b(M)>0, \forall M\in\mcal_{0}^{\mathrm{tail}}(t) \right\}.
+\end{equation*}
+This set represents the interior of the budget: it encompasses all states where no active mask has fully exhausted its budget allocation.
+
+\subsubsection{Standing Assumptions}
+
+We require formal regularity conditions on the costs and the realized replanning trajectory.
+
+\begin{assumptions}
+\item\label{ass:A1} (Strong convexity and smoothness.) There exist constants $0 < \mu \le \beta$ such that, for each $u$, the realized cost $\tilde{c}_u$ is continuously differentiable on $[0,s_{\max}]$, twice continuously differentiable on $(0,s_{\max})$, and satisfies $\mu \le \tilde{c}_u''(s) \le \beta$. The forecast curves $\hat{c}_{t,u}$ satisfy identical bounds. Write $\kappa := \beta/\mu$.
+\item\label{ass:A2} (Trajectory interiority.)
+  There exists a margin $\delta > 0$ such that, along the realized trajectory $\{(\mathbf{b}_t,s_t)\}_{t=1}^{T}$ generated by the replanning policy, for each $t \in \{1,\dots,T\}$, both the replanning action and the Bellman-optimal action lie in the interior of the one-step feasible interval:
+  \begin{equation*}
+    s_t,\ s_t^{\star}
+    \in
+    [\delta,\ \sup\scalt(\mathbf{b}_t)-\delta].
+  \end{equation*}
+  Furthermore, for each $t \in \{1,\dots,T-1\}$, every coordinate of the primal optima of both $V_{t+1}(\mathbf{b}_{t+1})$ and $\hat{V}_{t+1\mid t}(\mathbf{b}_{t+1})$ lies in $[\delta, s_{\max} - \delta]$.
+\item\label{ass:A3} (Decreasing costs.)
+  For each $t \in \{1,\dots,T\}$, $\tilde{c}_t'(s) < 0$ and $\hat{c}_{t,u}'(s) < 0$ for all $s \in [0,s_{\max}]$.
+\end{assumptions}
+
+The interiority condition (\ref{ass:A2}) ensures that the budget is neither entirely depleted nor perfectly abundant along the path actually taken by the algorithm, avoiding degenerate boundary constraints.
+The decreasing costs condition (\ref{ass:A3}) reflects the practical reality that larger thresholds (which consume more log-budget) result in smaller prediction sets and lower costs.
+Note that the strong convexity in \ref{ass:A1} inherently guarantees that the optimization problems are well-posed convex programs (sufficient for weak duality and existence), while also ensuring unique primal optima and enabling the suboptimality bounds via the strong convexity parameter $\mu$.
+
+\begin{remark}
+  To demonstrate that these assumptions are not vacuous, we provide a concrete example from batch-sequential conformal prediction where they are naturally satisfied.
+  The stage cost $\tilde{c}_{t}(s)$ represents the expected size of the prediction sets under a log-budget $s$.
+  Increasing the log-budget corresponds to a larger allowable miscoverage level $\tau = 1 - e^{-s}$.
+  In many conformal prediction settings, the expected set size decays gracefully with the coverage probability $1-\tau$.
+  For instance, suppose the set size is proportional to $(1-\tau)^{\gamma}$ for some $C > 0$ and $\gamma > 0$.
+  Then the proxy cost is $c_{t}(\tau) = C(1-\tau)^{\gamma}$.
+
+  The log-transformed cost directly becomes $\tilde{c}_{t}(s) = c_t(1-e^{-s}) = C e^{-\gamma s}$.
+  This function has derivatives $\tilde{c}_{t}'(s) = -C\gamma e^{-\gamma s}$ and $\tilde{c}_{t}''(s) = C\gamma^2 e^{-\gamma s}$.
+  Clearly, $\tilde{c}_{t}'(s) < 0$, so the cost is strictly decreasing (\ref{ass:A3}).
+  Furthermore, $\tilde{c}_{t}''(s) > 0$ for all $s \ge 0$, so $\tilde{c}_{t}$ is strictly convex.
+  Because the decision domain $s \in [0, s_{\max}]$ is bounded, this continuous second derivative is uniformly bounded by constants $0 < \mu \leq \beta$ (specifically $\mu = C\gamma^2 e^{-\gamma s_{\max}}$ and $\beta = C\gamma^2$), which guarantees the strong convexity and smoothness bounds (\ref{ass:A1}).
+
+  Furthermore, the strictly decreasing nature of the costs (\ref{ass:A3}) is linked to the interiority condition (\ref{ass:A2}).
+  Since marginal costs decrease as the budget increases, the optimal policy fully consumes the available budget.
+  Moreover, because the marginal cost $\tilde{c}_{t}'(s) = -C\gamma e^{-\gamma s}$ is strictly increasing, allocating the budget uniformly across active tail stages is more efficient than severely depleting it in one stage (which would force other stages to $0$ and incur a steep penalty of $-C\gamma$).
+  Under sufficiently homogeneous cost curves, this balances the allocation and forces the trajectory into the interior of the feasible domain, avoiding degenerate boundary constraints.
+\end{remark}
+
+\subsubsection{Lagrangian Duality}
+\label{subsec:duality}
+
+In our results, we exploit the duality structure of $V_t$ and its forecasted approximation. In particular, let $\Lambda_t$ be the cone of nonnegative multipliers $\boldsymbol{\lambda} \in \R_{\ge 0}^{|\mcal_{0}|}$ where $\lambda(M)=0$ if mask $M$ is inactive in the tail ($\sum_{u=t}^T M_u = 0$).
+The tail Lagrangian is
+\begin{equation*}
+  \mathcal{L}_t(\mathbf{s},\boldsymbol{\lambda};\mathbf{b})
+  :=
+  \sum_{u=t}^{T} \tilde{c}_u(s_u)
+  + \boldsymbol{\lambda}^\top (\mathbf{M}_{t:T} \mathbf{s} - \mathbf{b}),
+  \qquad \mathbf{s} \in [0,s_{\max}]^{T-t+1},
+\end{equation*}
+where $\mathbf{M}_{t:T} := [\mathbf{m}_t, \dots, \mathbf{m}_T] \in \{0,1\}^{|\mcal_{0}| \times (T-t+1)}$ is the mask-incidence matrix whose columns are the incidence directions for the tail stages, such that its entry for mask $M$ and stage $u$ is $M_u$.
+The dual function is $\mathcal{D}_t(\boldsymbol{\lambda};\mathbf{b}) := \min_{\mathbf{s}} \mathcal{L}_t(\mathbf{s},\boldsymbol{\lambda};\mathbf{b})$, and the dual-optimal set is $D_t(\mathbf{b}) := \argmax_{\boldsymbol{\lambda} \in \Lambda_t} \mathcal{D}_t(\boldsymbol{\lambda};\mathbf{b})$.
+
+In the following sequence of results, we explicitly write the proofs for the exact value function $V_t$ and the realized costs $\tilde{c}$. Because the forecasted costs $\hat{c}$ satisfy identical structural conditions under Standing Assumptions \ref{ass:A1}--\ref{ass:A3}, every lemma holds symmetrically for the forecasted tail program $\hat{V}_{u \mid t}$. For clarity, we state both results in the lemma but omit the completely redundant proof for the forecast.
+
+\begin{lemma}[At least one budget constraint is tight]
+  \label{lem:budget-tight-app}
+  Under \ref{ass:A2} and \ref{ass:A3}, for any tail-interior budget vector $\mathbf{b} \in \bcal_{t+1}^\circ$, at least one tail-active mask constraint is satisfied with strict equality at every primal optimum of $V_{t+1}(\mathbf{b})$ and $\hat{V}_{t+1\mid t}(\mathbf{b})$. That is, there exists a mask $M \in \mcal_{0}$ with $\sum_{u=t+1}^T M_u > 0$ such that $\sum_{u=t+1}^{T} M_u s_u = b(M)$.
+\end{lemma}
+\begin{proof}
+  By the trajectory interiority assumption (\ref{ass:A2}), the primal optima $\mathbf{s}^\star$ and $\hat{\mathbf{s}}$ lie strictly in $(0, s_{\max})^{T-t}$. If all active budget constraints were strictly loose (i.e., $\sum_{u=t+1}^{T} M_u s_u < b(M)$ for all active $M$), one could strictly increase every $s_u$ by some infinitesimal amount $\varepsilon > 0$ without violating any budget constraint or the upper bound $s_{\max}$. Since the cost functions are strictly decreasing (\ref{ass:A3}), this uniform perturbation would strictly decrease the objective value, which contradicts the optimality of $\mathbf{s}^\star$. Therefore, at least one active constraint must bind.
+\end{proof}
+
+\begin{lemma}[Dual uniqueness under nontrivial trajectories]
+  \label{lem:dual-unique-app}
+  Under \ref{ass:A1}--\ref{ass:A3}, fix $t \in \{1,\dots,T-1\}$ and let $\mathbf{b} = \mathbf{b}_{t+1} \in \bcal_{t+1}^\circ$ be the realized remaining budget vector.
+  Then the tail program $V_{t+1}(\mathbf{b})$ possesses a unique primal optimum $\mathbf{s}^{\star} \in (0,s_{\max})^{T-t}$.
+  Moreover, provided the incidence vectors of the binding mask constraints are linearly independent, the corresponding optimal dual multiplier vector $\boldsymbol{\lambda}(\mathbf{b}) \in \Lambda_{t+1}$ is uniquely determined, and satisfies $\mathbf{M}_{t+1:T}^\top \boldsymbol{\lambda}(\mathbf{b}) > 0$ component-wise. In particular, if there is only a single binding mask, its multiplier is strictly positive.
+  Identical uniqueness properties hold for the forecasted tail program $\hat{V}_{t+1\mid t}(\mathbf{b})$, yielding a unique primal restricted action $\hat{\mathbf{s}} \in (0,s_{\max})^{T-t}$ and unique dual vector $\hat{\boldsymbol{\lambda}}(\mathbf{b}) \in \Lambda_{t+1}$ satisfying $\mathbf{M}_{t+1:T}^\top \hat{\boldsymbol{\lambda}}(\mathbf{b}) > 0$.
+\end{lemma}
+\begin{proof}
+  Since the objectives are strongly convex (\ref{ass:A1}), the primal optima are unique. By \ref{ass:A2}, they are strictly interior, so the tight constraints only arise from the mask limits $b(M)$, preventing box multipliers. The KKT stationarity condition therefore dictates $\nabla \tilde{c}(\mathbf{s}^\star) + \mathbf{M}_{t+1:T}^\top \boldsymbol{\lambda} = 0$. By complementary slackness, $\lambda(M) = 0$ for any non-binding mask. The values of the binding dual multipliers are given by the solution to exactly this linear subsystem; thus, when the binding masks' rows in $\mathbf{M}_{t+1:T}$ are linearly independent, the mapping from the unique primal $\mathbf{s}^\star$ to the dual $\boldsymbol{\lambda}(\mathbf{b})$ is strictly determined and unique. Since $\tilde{c}_u' < 0$ (\ref{ass:A3}), the stationarity condition implies $\mathbf{M}_{t+1:T}^\top \boldsymbol{\lambda} = -\nabla \tilde{c}(\mathbf{s}^\star) > 0$ component-wise.
+\end{proof}
+
+\begin{lemma}[Existence and strong duality]
+  \label{lem:slater-attainment}
+  Under \ref{ass:A1}, for $\mathbf{b} \in \bcal_t^\circ$, Slater's condition holds for the offline tail program. Strong duality holds, and the dual optimum $D_t(\mathbf{b})$ is non-empty.
+\end{lemma}
+\begin{proof}
+  Since $b(M)>0$ for all active masks, setting $s_u = \epsilon$ for a sufficiently small $\epsilon>0$ strictly satisfies all active linear constraints. The result follows by standard convex duality for compact feasible sets.
+\end{proof}
+
+\begin{lemma}[First-order optimality]
+  \label{lem:interior-optimality}
+  Under \ref{ass:A1} and \ref{ass:A2}, if the optimal coordinate $s_u^\star \in (0, s_{\max})$, then $\tilde{c}_u'(s_u^\star) = - \sum_{M \in \mcal_0} M_{u} \lambda^\star(M)$ for any $\boldsymbol{\lambda}^\star \in D_t(\mathbf{b})$.
+  Similarly, for the forecasted tail program, if $\hat{s}_u \in (0, s_{\max})$, then $\hat{c}_{t,u}'(\hat{s}_u) = - \sum_{M \in \mcal_0} M_{u} \hat{\lambda}^\star(M)$ for any $\hat{\boldsymbol{\lambda}}^\star \in \hat{D}_{u \mid t}(\mathbf{b})$.
+\end{lemma}
+\begin{proof}
+  By restricted strong duality (Lemma~\ref{lem:slater-attainment}), the primal-dual pair forms a saddle point of the tail Lagrangian.
+  Equivalently, the optimal sequence $\mathbf{s}^\star$ solves the decoupled minimization of the Lagrangian over the box constraints $0 \le s_u \le s_{\max}$.
+  Introducing nonnegative dual multipliers $\nu_u^-$ for the lower bounds ($-s_u \le 0$) and $\nu_u^+$ for the upper bounds ($s_u - s_{\max} \le 0$), the Karush--Kuhn--Tucker (KKT) stationarity condition states:
+  \begin{equation}
+    \label{eq:kkt-stationarity}
+    \tilde{c}_u'(s_u^\star) + \sum_{M \in \mcal_0} M_{u} \lambda^\star(M) - \nu_u^- + \nu_u^+ = 0.
+  \end{equation}
+  By hypothesis, the optimal coordinate $s_u^\star$ lies strictly in the interior of its domain. The complementary slackness conditions ($\nu_u^- s_u^\star = 0$ and $\nu_u^+(s_u^\star - s_{\max}) = 0$) therefore dictate that the bound multipliers must be exactly zero ($\nu_u^- = \nu_u^+ = 0$). Substituting these into \eqref{eq:kkt-stationarity} yields the exact relation. An identical KKT argument applies to the forecasted sequence.
+\end{proof}
+
+\begin{lemma}[Value-Function Subgradients]
+  \label{lem:dual-subgrad}
+  For $\mathbf{b} \in \bcal_t^\circ$, the exact value function satisfies $\subdiff V_t(\mathbf{b}) = \{-\boldsymbol{\lambda} : \boldsymbol{\lambda} \in D_t(\mathbf{b})\}$.
+  Similarly, for the forecasted value function, $\subdiff \hat{V}_{u\mid t}(\mathbf{b}) = \{-\hat{\boldsymbol{\lambda}} : \hat{\boldsymbol{\lambda}} \in \hat{D}_{u\mid t}(\mathbf{b})\}$.
+\end{lemma}
+\begin{proof}
+  We state the proof for the exact value function; the argument for the forecast is identical. The tail program defines $V_t(\mathbf{b})$ as the optimal value of a convex minimization problem parameterized by right-hand side perturbations $\mathbf{b}$.
+  Under Slater's condition, which holds for $\mathbf{b} \in \bcal_t^\circ$ by Lemma~\ref{lem:slater-attainment}, a standard result in convex programming duality (e.g., Theorem 29.1 in Rockafellar's \emph{Convex Analysis}) states that the subdifferential of the optimal value function with respect to these right-hand side constraints is exactly the negative of the dual optimal set.
+  Since $D_t(\mathbf{b})$ is convex, this set is equal to its convex hull.
+\end{proof}
+
+\subsection{The Replanning Suboptimality Theorem}
+
+We quantify the performance loss of replanning relative to the offline optimum for the realized costs.
+The bound is controlled by a stage-cost forecasting error and a directional error in the forecasted tail value function.
+
+Define the directional dual-multiplier error
+\begin{equation}
+  \label{eq:eps-def-app}
+  \epsilon_t(\mathbf{b})
+  :=
+  \sup_{\substack{\hat{\boldsymbol{\lambda}}\in\hat{D}_{t+1\mid t}(\mathbf{b})\\ \boldsymbol{\lambda}\in D_{t+1}(\mathbf{b})}}
+  \left| (\hat{\boldsymbol{\lambda}}-\boldsymbol{\lambda})^\top\mathbf{m}_t \right|,
+  \qquad \mathbf{b}\in\bcal_{t+1}^{\circ},
+\end{equation}
+and let $\epsilon_t := \sup_{\mathbf{b}\in\bcal_{t+1}^{\circ}} \epsilon_t(\mathbf{b})$.
+
+\begin{proof}[Proof of Proposition~\ref{prop:replan-validity}]
+  Fix $M\in\mcal_0$ and define the no-failure event
+  \begin{equation*}
+    \mathcal{E}_T^{M}
+    \coloneqq
+    \left\{\forall t\in\{1,\dots,T\}\colon M_t=0\ \text{or}\ \err_t(\acal)=0\right\}.
+  \end{equation*}
+  For $t\in\{0,\dots,T\}$, write $\mathcal{E}_t^{M}$ for the analogous event restricted to times $\{1,\dots,t\}$.
+  Define the process
+  \begin{equation*}
+    Z_t
+    \coloneqq
+    \frac{\ind{\mathcal{E}_t^{M}}}{\prod_{u=1}^{t} (1-\tau_u)^{M_u}},
+    \qquad t\in\{0,\dots,T\},
+  \end{equation*}
+  with the convention that an empty product equals $1$.
+  Since $\tau_t$ is $\mathcal{I}_{t-1}$-measurable, Proposition~\ref{prop:iid-pvalues} implies that, conditional on $\mathcal{I}_{t-1}$, the $p$-value $p_t(X_t,Y_t)$ is super-uniform and independent of $\tau_t$.
+  Therefore,
+  \begin{equation*}
+    \expec\left[\ind{\mathcal{E}_t^{M}} \middle| \mathcal{I}_{t-1}\right]
+    = \ind{\mathcal{E}_{t-1}^{M}}\prob\Big(p_t(X_t,Y_t)>\tau_t \Big| \mathcal{I}_{t-1}\Big)^{M_t}
+    \ge \ind{\mathcal{E}_{t-1}^{M}}(1-\tau_t)^{M_t},
+  \end{equation*}
+  which yields $\expec[Z_t \mid \mathcal{I}_{t-1}]\ge Z_{t-1}$.
+  Hence $(Z_t)_{t=0}^{T}$ is a nonnegative submartingale and $\expec[Z_T]\ge \expec[Z_0]=1$.
+
+  By assumption, $\sum_{t=1}^{T} M_t s_t \le L$ almost surely, so
+  \begin{equation*}
+    \prod_{t=1}^{T} (1-\tau_t)^{M_t}
+    = \exp\Big(-\sum_{t=1}^{T} M_t s_t\Big)
+    \ge \exp(-L)
+    = 1-\alpha
+  \end{equation*}
+  almost surely.
+  Therefore,
+  \begin{equation*}
+    \prob(\mathcal{E}_T^{M})
+    = \expec\left[Z_T\prod_{t=1}^{T} (1-\tau_t)^{M_t}\right]
+    \ge (1-\alpha)\expec[Z_T]
+    \ge 1-\alpha,
+  \end{equation*}
+  and thus $\prob(F_T(M,\acal))\le \alpha$.
+  Taking the supremum over $M\in\mcal_0$ yields mask-validity.
+
+  For suffix-validity, fix any $s\in\{0,\dots,T-1\}$ and apply the same argument to the tail event
+  \begin{equation*}
+    \mathcal{E}_{>s}^{M}
+    \coloneqq
+    \left\{\forall t>s\colon M_t=0\ \text{or}\ \err_t(\acal)=0\right\},
+  \end{equation*}
+  working conditionally on $\mathcal{I}_s$ and using the tail log-budget bound $\sum_{t=s+1}^{T} M_t s_t\le L$.
+  This gives
+  \begin{equation*}
+    \prob\Big(\exists t>s\colon M_t=1,\ \err_t(\acal)=1 \Big| \mathcal{I}_s\Big)\le \alpha.
+  \end{equation*}
+  Restart-validity follows by restricting this conditional bound to $\{\sigma_j^{M}=s\}$ and using $\{\exists t>s\colon M_t=1,\ \err_t(\acal)=1\}=\{\sigma_{j+1}^{M}\le T\}$ on that event, as in Definition~\ref{def:restart-valid}.
+\end{proof}\par\medskip
+
+\begin{theorem}[Closed-loop suboptimality bound]
+  \label{thm:replan-regret}
+  Assume each realized cost curve $\tilde{c}_t$ and each forecast curve $\hat{c}_{t,u}$ is proper, closed, convex, and finite on an open neighborhood of $[0,s_{\max}]$.
+  Assume also that the replanning trajectory satisfies $\mathbf{b}_{t+1}\in\bcal_{t+1}^{\circ}$ for all $t\in\{1,\dots,T\}$.
+  Let $(s_t)_{t=1}^{T}$ be generated by \eqref{eq:replan-action} and define the suboptimality gap
+  \begin{equation*}
+    \mathrm{Gap} := \sum_{t=1}^{T} \tilde{c}_t(s_t) - V_1(L\1).
+  \end{equation*}
+  Then $\mathrm{Gap}=\sum_{t=1}^{T} \delta_t$, where $\delta_t:=\tilde{c}_t(s_t)+V_{t+1}(\mathbf{b}_{t+1})-V_t(\mathbf{b}_t)$, and
+  \begin{equation*}
+    0 \le \delta_t \le \left(\epsilon_t(\mathbf{b}_{t+1})+\eta_t(s_t)\right)|s_t-s_t^{\star}|
+    \le (\epsilon_t+\eta_t)|s_t-s_t^{\star}|,
+  \end{equation*}
+  where $s_t^{\star}\in\argmin_{s\in\scalt(\mathbf{b}_t)}[\tilde{c}_t(s)+V_{t+1}(\mathbf{b}_t-s\mathbf{m}_t)]$ denotes the Bellman-optimal action for the true costs.
+
+  If, in addition, each $\tilde{c}_t$ is $\mu$-strongly convex on $[0,s_{\max}]$ for some $\mu>0$, then
+  \begin{equation*}
+    \mathrm{Gap} \le \frac{1}{2\mu}\sum_{t=1}^{T} (\epsilon_t+\eta_t)^2.
+  \end{equation*}
+\end{theorem}
+
+\begin{proof}[Proof of Theorem~\ref{thm:replan-regret}]
+  We first recall why $\scalt(\mathbf{b})$ is the correct one-step feasible interval.
+  Fix $t$ and $\mathbf{b}\ge 0$ coordinatewise.
+  If $0\le s\le \min\{s_{\max},\inf_{M\in\mcal_{0}:M_t=1} b(M)\}$, then for every mask $M$ with $M_t=1$ we have $s\le b(M)$, and for every mask with $M_t=0$ we have $M_t s = 0\le b(M)$.
+  Taking the completion $s_{t+1}=\cdots=s_T=0$ shows that $s\in\scalt(\mathbf{b})$ indeed admits a feasible tail completion.
+  Conversely, if $s>\min\{s_{\max},\inf_{M\in\mcal_{0}:M_t=1} b(M)\}$, then either $s>s_{\max}$ or there exists a mask $M$ with $M_t=1$ and $b(M)<s$.
+  In either case, feasibility fails for any completion with $s_{t+1:T}\ge 0$ because $\sum_{u=t}^{T} M_u s_u \ge M_t s = s > b(M)$.
+
+  \paragraph{Step 1 (Bellman recursion and telescoping).}
+  Define the one-step cost-to-go
+  \begin{equation*}
+    h_t(s;\mathbf{b})
+    \coloneqq
+    \tilde{c}_t(s)+V_{t+1}(\mathbf{b}-s\mathbf{m}_t).
+  \end{equation*}
+  Splitting the offline tail program at time $t$ yields the Bellman recursion
+  \begin{equation*}
+    V_t(\mathbf{b})=\min_{s\in\scalt(\mathbf{b})} h_t(s;\mathbf{b}).
+  \end{equation*}
+  Therefore, writing $\mathbf{b}_{t+1}=\mathbf{b}_t-s_t\mathbf{m}_t$, the one-step Bellman suboptimality is
+  \begin{equation*}
+    \delta_t
+    =
+    h_t(s_t;\mathbf{b}_t)-\min_{s\in\scalt(\mathbf{b}_t)}h_t(s;\mathbf{b}_t)
+    \ge 0.
+  \end{equation*}
+  Summing $\delta_t=\tilde{c}_t(s_t)+V_{t+1}(\mathbf{b}_{t+1})-V_t(\mathbf{b}_t)$ over $t=1,\dots,T$ telescopes:
+  \begin{equation*}
+    \sum_{t=1}^{T}\delta_t
+    =
+    \sum_{t=1}^{T}\tilde{c}_t(s_t)
+    +
+    \sum_{t=1}^{T}\left[V_{t+1}(\mathbf{b}_{t+1})-V_t(\mathbf{b}_t)\right]
+    =
+    \sum_{t=1}^{T}\tilde{c}_t(s_t)-V_1(L\1),
+  \end{equation*}
+  since $V_{T+1}(\cdot)=0$ and $\mathbf{b}_1=L\1$.
+
+  \paragraph{Step 2 (One-step suboptimality bound).}
+  Fix $t$.
+  Let $s_t^{\star}\in\argmin_{s\in\scalt(\mathbf{b}_t)}h_t(s;\mathbf{b}_t)$ denote a Bellman-optimal action for the true costs.
+  By the subgradient inequality, for any $g\in\partial h_t(s_t;\mathbf{b}_t)$,
+  \begin{equation*}
+    h_t(s_t^{\star};\mathbf{b}_t)\ge h_t(s_t;\mathbf{b}_t)+g(s_t^{\star}-s_t),
+  \end{equation*}
+  hence $\delta_t=h_t(s_t;\mathbf{b}_t)-h_t(s_t^{\star};\mathbf{b}_t)\le g(s_t-s_t^{\star})$.
+
+  Define the forecasted cost-to-go
+  \begin{equation*}
+    \hat{h}_t(s;\mathbf{b})
+    \coloneqq
+    \hat{c}_{t,t}(s)+\hat{V}_{t+1\mid t}(\mathbf{b}-s\mathbf{m}_t).
+  \end{equation*}
+  Since $s_t$ minimizes $\hat{h}_t(\cdot;\mathbf{b}_t)$ over the interval $\scalt(\mathbf{b}_t)$, the first-order optimality condition for convex minimization over a convex set implies that there exists $\hat{g}\in\partial \hat{h}_t(s_t;\mathbf{b}_t)$ such that
+  \begin{equation*}
+    \hat{g}(s-s_t)\ge 0,\qquad \forall s\in\scalt(\mathbf{b}_t).
+  \end{equation*}
+  In particular, taking $s=s_t^{\star}$ yields $\hat{g}(s_t^{\star}-s_t)\ge 0$, i.e., $\hat{g}(s_t-s_t^{\star})\le 0$.
+  Therefore,
+  \begin{equation*}
+    \delta_t
+    \le g(s_t-s_t^{\star})
+    = (g-\hat{g})(s_t-s_t^{\star})+\hat{g}(s_t-s_t^{\star})
+    \le |g-\hat{g}|\cdot |s_t-s_t^{\star}|.
+  \end{equation*}
+
+  It remains to bound $|g-\hat{g}|$.
+  By the subdifferential sum rule and affine chain rule applied at $s_t$ (using that all functions are convex and finite on a neighborhood of $[0,s_{\max}]$ and $\mathbf{b}_{t+1}\in\bcal_{t+1}^{\circ}$), every $g\in\partial h_t(s_t;\mathbf{b}_t)$ admits a decomposition
+  \begin{equation*}
+    g = g_c - g_V^{\top}\mathbf{m}_t,
+    \qquad
+    g_c\in\partial \tilde{c}_t(s_t),
+    \qquad
+    g_V\in\partial V_{t+1}(\mathbf{b}_{t+1}),
+  \end{equation*}
+  and similarly every $\hat{g}\in\partial \hat{h}_t(s_t;\mathbf{b}_t)$ can be written as
+  \begin{equation*}
+    \hat{g} = \hat{g}_c - \hat{g}_V^{\top}\mathbf{m}_t,
+    \qquad
+    \hat{g}_c\in\partial \hat{c}_{t,t}(s_t),
+    \qquad
+    \hat{g}_V\in\partial \hat{V}_{t+1\mid t}(\mathbf{b}_{t+1}).
+  \end{equation*}
+  Therefore,
+  \begin{equation*}
+    |g-\hat{g}|
+    \le |\hat{g}_c-g_c| + |(\hat{g}_V-g_V)^{\top}\mathbf{m}_t|
+    \le \eta_t(s_t)+\epsilon_t(\mathbf{b}_{t+1}),
+  \end{equation*}
+  where the last inequality uses the definitions of $\eta_t$ and $\epsilon_t$ together with Lemma~\ref{lem:dual-subgrad}.
+  Substituting back gives
+  \begin{equation*}
+    0\le \delta_t \le \left(\eta_t(s_t)+\epsilon_t(\mathbf{b}_{t+1})\right)|s_t-s_t^{\star}|
+    \le (\eta_t+\epsilon_t)|s_t-s_t^{\star}|.
+  \end{equation*}
+
+  \paragraph{Step 3 (Strong convexity refinement).}
+  Now assume each $\tilde{c}_t$ is $\mu$-strongly convex on $[0,s_{\max}]$.
+  Since $s\mapsto V_{t+1}(\mathbf{b}_t-s\mathbf{m}_t)$ is convex as a composition of a convex function with an affine map, $h_t(\cdot;\mathbf{b}_t)$ is also $\mu$-strongly convex on $\scalt(\mathbf{b}_t)$.
+  Fix any $g\in\partial h_t(s_t;\mathbf{b}_t)$ and write $d\coloneqq |s_t-s_t^{\star}|$.
+  Strong convexity implies
+  \begin{equation*}
+    h_t(s_t^{\star};\mathbf{b}_t)
+    \ge h_t(s_t;\mathbf{b}_t)+g(s_t^{\star}-s_t)+\frac{\mu}{2}d^2,
+  \end{equation*}
+  hence
+  \begin{equation*}
+    \delta_t
+    \le g(s_t-s_t^{\star})-\frac{\mu}{2}d^2.
+  \end{equation*}
+  Using $g=\hat{g}+(g-\hat{g})$ and $\hat{g}(s_t-s_t^{\star})\le 0$ as in Step~2 gives
+  \begin{equation*}
+    \delta_t
+    \le |g-\hat{g}|\cdot d-\frac{\mu}{2}d^2.
+  \end{equation*}
+  Let $A_t\coloneqq |g-\hat{g}|\le \eta_t(s_t)+\epsilon_t(\mathbf{b}_{t+1})$.
+  Maximizing the quadratic upper bound $A_t d-(\mu/2)d^2$ over $d\ge 0$ yields
+  \begin{equation*}
+    \delta_t
+    \le \frac{A_t^2}{2\mu}
+    \le \frac{1}{2\mu}\left(\eta_t(s_t)+\epsilon_t(\mathbf{b}_{t+1})\right)^2
+    \le \frac{1}{2\mu}(\epsilon_t+\eta_t)^2.
+  \end{equation*}
+  Summing over $t$ gives the strong-convexity bound on $\mathrm{Gap}$.
+\end{proof}
+
+\subsection{Analysis of the All-Ones Mask}
+\label{app:dual-bounds}
+
+We now prove the multiplier error bound for the all-ones mask $\mcal_{0}=\{\1\}$.
+The state is the scalar remaining budget $b_t := L - \sum_{u<t} s_u$,
+and the feasible set is $\scalt(b_t) = [0,\min\{b_t,s_{\max}\}]$.
+Write $N := T-t$.
+
+For $\lambda \ge 0$ and $u \in \{t+1,\dots,T\}$, define the box-constrained coordinate response maps
+\begin{equation*}
+  \begin{aligned}
+    \psi_u(\lambda)
+    &\eqdef \argmin_{s \in [0,s_{\max}]} \bigl(\tilde{c}_u(s)+\lambda s\bigr),\\
+    \hat{\psi}_{t,u}(\lambda)
+    &\eqdef \argmin_{s \in [0,s_{\max}]} \bigl(\hat{c}_{t,u}(s)+\lambda s\bigr).
+  \end{aligned}
+\end{equation*}
+and the aggregate demand functions
+\begin{equation*}
+  \Phi(\lambda)
+  \eqdef \sum_{u=t+1}^{T} \psi_u(\lambda),
+  \qquad
+  \hat{\Phi}(\lambda)
+  \eqdef \sum_{u=t+1}^{T} \hat{\psi}_{t,u}(\lambda).
+\end{equation*}
+Under strong convexity, each summand is unique, so $\Phi$ and $\hat{\Phi}$
+are well-defined functions of $\lambda \ge 0$.
+
+\begin{theorem}[Multiplier error bound for the all-ones mask]
+  \label{thm:epsilon-allones-app}%
+  Assume the cost regularity conditions from Section~\ref{sec:finite}, \ref{ass:A2}, and \ref{ass:A3}.
+  For $t \in \{1,\dots,T-1\}$ and $b = b_{t+1} > 0$,
+  \begin{equation}
+    \label{eq:epsilon-allones-app}
+    \begin{aligned}
+      \epsilon_t(b)
+      &= |\lambda(b)-\hat{\lambda}(b)|\\
+      &\le \kappa\bar{e}_{t,>t},\\
+      \bar{e}_{t,>t}
+      &:= \frac{1}{N}\sum_{u=t+1}^{T} e_{t,u}.
+    \end{aligned}
+  \end{equation}
+\end{theorem}
+
+\begin{proof}
+  Fix $t \in \{1,\dots,T-1\}$ and $b = b_{t+1} > 0$.
+  By Lemma~\ref{lem:dual-unique-app}, both dual optima are unique
+  and positive: $\lambda(b) > 0$, $\hat{\lambda}(b) > 0$.
+  Since the dual sets are singletons,
+  $\subdiff V_{t+1}(b)=\{-\lambda(b)\}$
+  and $\subdiff\hat{V}_{t+1\mid t}(b)=\{-\hat{\lambda}(b)\}$,
+  hence $\epsilon_t(b)=|\lambda(b)-\hat{\lambda}(b)|$.
+
+  The proof proceeds in three steps:
+  demand perturbation (Step~1),
+  inverse Lipschitz (Step~2),
+  and the final combination (Step~3).
+
+  %--- Step 1: Demand perturbation ------------------------------------------
+  \paragraph{Step 1}
+  We show that for every $\lambda \ge 0$,
+  \begin{equation}
+    \label{eq:demand-pert-app}
+    |\Phi(\lambda)-\hat{\Phi}(\lambda)|
+    \le \frac{N}{\mu}\bar{e}_{t,>t}.
+  \end{equation}
+  Fix $\lambda \ge 0$ and a stage $u \in \{t+1,\dots,T\}$.
+  Write $\psi := \psi_u(\lambda)$
+  and $\hat{\psi} := \hat{\psi}_{t,u}(\lambda)$.
+  Since $\psi$ minimizes $f_u(s) := \tilde{c}_u(s)+\lambda s$
+  over $[0,s_{\max}]$ and $f_u$ is $\mu$-strongly convex,
+  the quadratic growth condition gives
+  \begin{equation}
+    \label{eq:qg-1-app}
+    f_u(\hat{\psi})
+    \ge f_u(\psi) + \frac{\mu}{2}(\hat{\psi}-\psi)^{2}.
+  \end{equation}
+  Similarly, since $\hat{\psi}$ minimizes
+  $\hat{f}_{t,u}(s) := \hat{c}_{t,u}(s)+\lambda s$
+  over $[0,s_{\max}]$,
+  \begin{equation}
+    \label{eq:qg-2-app}
+    \hat{f}_{t,u}(\psi)
+    \ge \hat{f}_{t,u}(\hat{\psi}) + \frac{\mu}{2}(\hat{\psi}-\psi)^{2}.
+  \end{equation}
+  Adding~\eqref{eq:qg-1-app} and~\eqref{eq:qg-2-app}:
+  \begin{equation*}
+    \bigl[f_u(\hat{\psi})-\hat{f}_{t,u}(\hat{\psi})\bigr]
+    - \bigl[f_u(\psi)-\hat{f}_{t,u}(\psi)\bigr]
+    \ge \mu(\hat{\psi}-\psi)^{2}.
+  \end{equation*}
+  Since $f_u - \hat{f}_{t,u} = \tilde{c}_u - \hat{c}_{t,u}$,
+  define $g_u := \tilde{c}_u - \hat{c}_{t,u}$.
+  The left-hand side equals $g_u(\hat{\psi})-g_u(\psi)$.
+  By the mean value theorem ($g_u$ is differentiable
+  on $(0,s_{\max})$ with continuous extension to $[0,s_{\max}]$),
+  there exists $\xi$ between $\psi$ and $\hat{\psi}$ with
+  $g_u(\hat{\psi})-g_u(\psi) = g_u'(\xi)(\hat{\psi}-\psi)$.
+  Since $|g_u'(\xi)| = |\tilde{c}_u'(\xi)-\hat{c}_{t,u}'(\xi)| \le e_{t,u}$,
+  we obtain
+  \begin{equation*}
+    \mu|\hat{\psi}-\psi|^{2}
+    \le e_{t,u}\cdot|\hat{\psi}-\psi|,
+  \end{equation*}
+  hence $|\psi_u(\lambda)-\hat{\psi}_{t,u}(\lambda)|
+  \le e_{t,u}/\mu$.
+  Summing over $u = t+1,\dots,T$ gives~\eqref{eq:demand-pert-app}.
+
+  %--- Step 2: Inverse Lipschitz -------------------------------------------
+  \paragraph{Step 2 (inverse Lipschitz of the aggregate demand).}
+  We show that
+  \begin{equation}
+    \label{eq:inv-lip-app}
+    |\Phi(\lambda_1)-\Phi(\lambda_2)|
+    \ge \frac{N}{\beta}|\lambda_1-\lambda_2|
+  \end{equation}
+  for all $\lambda_1,\lambda_2$ in the interval
+  $[\lambda(b) \wedge \hat{\lambda}(b),
+  \lambda(b) \vee \hat{\lambda}(b)]$.
+
+  By \ref{ass:A2}, the primal optimum of $V_{t+1}(b)$
+  lies in $(0,s_{\max})^{N}$, so the KKT stationarity conditions
+  $\tilde{c}_u'(s_u^{\star})+\lambda(b)=0$ hold for all $u$.
+  In particular, $\psi_u(\lambda(b)) = s_u^{\star} \in (0,s_{\max})$.
+  Similarly, by \ref{ass:A2},
+  $\hat{\psi}_{t,u}(\hat{\lambda}(b)) = \hat{s}_u \in (0,s_{\max})$
+  for all $u$.
+
+  We claim that for each $u$ and every $\lambda$ in the interval
+  $I := [\lambda(b) \wedge \hat{\lambda}(b),
+  \lambda(b) \vee \hat{\lambda}(b)]$,
+  the response $\psi_u(\lambda)$ is also interior.
+  This follows from the continuity and monotonicity of $\psi_u$:
+  increasing $\lambda$ adds a steeper linear penalty, pushing the minimizer down;
+  Since $\psi_u(\lambda(b)) \in (0,s_{\max})$
+  and costs are decreasing (\ref{ass:A3}), the response remains in $(0,s_{\max})$ throughout $I$.
+
+  With interiority on $I$ established, the first-order condition
+  $\tilde{c}_u'(\psi_u(\lambda))+\lambda = 0$ holds
+  for all $\lambda \in I$ and all~$u$.
+  Fix $\lambda_1,\lambda_2 \in I$.
+  Then
+  \begin{equation*}
+    \begin{aligned}
+      |\lambda_1-\lambda_2|
+      &= \bigl|
+      \tilde{c}_u'\bigl(\psi_u(\lambda_1)\bigr)
+      - \tilde{c}_u'\bigl(\psi_u(\lambda_2)\bigr)
+      \bigr|\\
+      &\le \beta\bigl|\psi_u(\lambda_1)
+      - \psi_u(\lambda_2)\bigr|.
+    \end{aligned}
+  \end{equation*}
+  where we used $\beta$-Lipschitzness of $\tilde{c}_u'$.
+  Rearranging: $|\psi_u(\lambda_1)
+  - \psi_u(\lambda_2)| \ge |\lambda_1-\lambda_2|/\beta$.
+  Summing over $u = t+1,\dots,T$ gives~\eqref{eq:inv-lip-app}.
+
+  %--- Step 3: Combining ---------------------------------------------------
+  \paragraph{Step 3 (combining the two bounds).}
+  By Lemma~\ref{lem:dual-unique-app}, both multipliers are positive:
+  $\lambda(b) > 0$ and $\hat{\lambda}(b) > 0$.
+  By Lemma~\ref{lem:budget-tight-app}, both budget constraints are tight:
+  $\Phi(\lambda(b)) = b$ and $\hat{\Phi}(\hat{\lambda}(b)) = b$.
+
+  Now apply the inverse Lipschitz bound~\eqref{eq:inv-lip-app}
+  with $\lambda_1 = \lambda(b)$ and $\lambda_2 = \hat{\lambda}(b)$:
+  \begin{align*}
+    \frac{N}{\beta}|\lambda(b)-\hat{\lambda}(b)|
+    &\le |\Phi(\lambda(b))-\Phi(\hat{\lambda}(b))| \\
+    &= |b - \Phi(\hat{\lambda}(b))| \\
+    &= |\hat{\Phi}(\hat{\lambda}(b)) - \Phi(\hat{\lambda}(b))| \\
+    &\le \frac{N}{\mu}\bar{e}_{t,>t},
+  \end{align*}
+  where the first equality uses $\Phi(\lambda(b))=b$,
+  the second uses $\hat{\Phi}(\hat{\lambda}(b))=b$,
+  and the last inequality is the demand perturbation
+  bound~\eqref{eq:demand-pert-app} at $\lambda = \hat{\lambda}(b)$.
+  Dividing by $N/\beta$ gives
+  \begin{equation*}
+    |\lambda(b)-\hat{\lambda}(b)|
+    \le \frac{\beta}{\mu}\bar{e}_{t,>t}
+    = \kappa\bar{e}_{t,>t}.
+    \qedhere
+  \end{equation*}
+\end{proof}
+
+\begin{corollary}[Total suboptimality gap for the all-ones mask --- formal version]
+  \label{cor:regret-allones-app}%
+  Under the assumptions of Theorem~\ref{thm:epsilon-allones-app},
+  the replanning suboptimality gap satisfies
+  \begin{equation*}
+    \mathrm{Gap}
+    \le \frac{\kappa^{2}}{\mu}\sum_{t=1}^{T-1} \bar{e}_{t,>t}^{2}
+    + \frac{1}{\mu}\sum_{t=1}^{T} e_{t,t}^{2}.
+  \end{equation*}
+\end{corollary}
+
+\begin{proof}
+  Under differentiability, $\eta_t(s_t)=|\tilde{c}_t'(s_t)-\hat{c}_{t,t}'(s_t)|\le e_{t,t}$.
+  Theorem~\ref{thm:replan-regret} (strongly convex case) gives
+  $\mathrm{Gap}\le (2\mu)^{-1}\sum_{t=1}^{T}(\epsilon_t+\eta_t)^2$.
+  Theorem~\ref{thm:epsilon-allones-app} gives $\epsilon_t \le \kappa \bar{e}_{t,>t}$ for $t \le T-1$ and $\epsilon_T=0$.
+  Using $(a+b)^2\le 2a^2+2b^2$ and dividing by $2\mu$ gives the claim.
+\end{proof}
+
+\section{Proofs of Section 5}
+\label{app:proofs_5}
+
+\begin{proof}[Proof of Proposition~\ref{prop:log2-spending}]
+  Since $x\mapsto 1/(x(\log(x))^2)$ is decreasing for $x\ge 3$, the integral test gives
+  \begin{equation*}
+    \sum_{t=1}^{\infty} \frac{1}{(t+1)(\log(t+1))^2}
+    =\sum_{k=2}^{\infty} \frac{1}{k(\log(k))^2}
+    \le \frac{1}{2(\log(2))^2} + \int_{2}^{\infty}\frac{1}{x(\log(x))^2}dx
+    = \frac{1}{2(\log(2))^2}+\frac{1}{\log(2)},
+  \end{equation*}
+  hence $Z\in(0,\infty)$.
+
+  By construction, $s_t=-\log(1-\tau_t)$ and $\sum_{t\ge 1} s_t=L$, so the log-budget constraint $\sum_{t\ge 1}-\log(1-\tau_t)\le L$ holds with equality.
+  For each integer $T\ge 1$, define the no-error event $A_T\coloneqq\{\forall t\in\{1,\dots,T\}\colon p_t>\tau_t\}$.
+  By independence and super-uniformity,
+  \begin{equation*}
+    \prob(A_T)=\prod_{t=1}^{T}\prob(p_t>\tau_t)\ge \prod_{t=1}^{T}(1-\tau_t).
+  \end{equation*}
+  Since $(A_T)_{T\ge 1}$ is decreasing in $T$, continuity from above yields
+  \begin{equation*}
+    \prob\Big(\forall t\ge 1\colon p_t>\tau_t\Big)
+    =\lim_{T\to\infty}\prob(A_T)
+    \ge \lim_{T\to\infty}\prod_{t=1}^{T}(1-\tau_t)
+    = \exp\Big(-\sum_{t\ge 1} s_t\Big)
+    = \exp(-L)
+    = 1-\alpha,
+  \end{equation*}
+  which implies $\prob(\exists t\ge 1\colon p_t\le \tau_t)\le \alpha$.
+
+  For informativity, recall that the conformal grid is $\{1/(n+1),\dots,1\}$, so time $t$ is grid-informative iff $\tau_t\ge 1/(n+1)$.
+  Since $\tau_t=1-\exp(-s_t)$, this is equivalent to $s_t\ge \log((n+1)/n)$.
+  By $\log(1+x)\le x$,
+  \begin{equation*}
+    \log((n+1)/n)=\log(1+1/n)\le 1/n,
+  \end{equation*}
+  so it suffices to ensure $s_t\ge 1/n$.
+  If $t\le T_{\log^2}(n,\alpha)$, then by definition,
+  \begin{equation*}
+    t+1 \le \frac{(L n)/Z}{(\log(2+(L n)/Z))^2}.
+  \end{equation*}
+  Let $u\coloneqq (L n)/Z$.
+  If $u\ge \exp(1)-2$, then $\log(2+u)\ge 1$ and $u/(\log(2+u))^2\le u\le u+2$.
+  If $u< \exp(1)-2$, then $u/(\log(2+u))^2\le (\exp(1)-2)/(\log(2))^2<2\le u+2$.
+  Therefore, $u/(\log(2+u))^2\le u+2$ for all $u\ge 0$, so $t+1\le 2+u$.
+  Hence $\log(t+1)\le \log(2+u)=\log(2+(L n)/Z)$ and therefore
+  \begin{equation*}
+    (t+1)(\log(t+1))^2
+    \le (t+1)(\log(2+(L n)/Z))^2
+    \le \frac{L n}{Z}.
+  \end{equation*}
+  Rearranging gives $s_t\ge 1/n$, hence $\tau_t\ge 1/(n+1)$.
+  Finally, since $(L n)/Z\to\infty$ as $n\to\infty$, we have $\log(2+(L n)/Z)=\Theta(\log(n))$, and the definition \eqref{eq:Tlog2} yields $T_{\log^2}(n,\alpha)=\Omega(n/(\log(n))^2)$.
+\end{proof}\par\medskip
+
+\begin{proof}[Proof of Lemma~\ref{lem:beta-law}]
+  Let $S_{0},\dots,S_{n}\stackrel{\text{i.i.d.}}{\sim}\mathrm{Gamma}(a,\theta)$.
+  The vector of normalized proportions
+  \begin{equation*}
+    \Big(\frac{S_{0}}{\sum_{i=0}^{n} S_{i}},\dots,\frac{S_{n}}{\sum_{i=0}^{n} S_{i}}\Big)
+  \end{equation*}
+  has a $\mathrm{Dirichlet}(a,\dots,a)$ distribution by the standard Gamma--Dirichlet construction (the common scale $\theta$ cancels).
+  Hence the first coordinate $U \coloneqq S_{0}/\sum_{i=0}^{n} S_{i}$ is $\mathrm{Beta}(a,na)$.
+  Since $E_{t}=(n+1)U$, we obtain $E_{t}/(n+1)\sim \mathrm{Beta}(a,na)$.
+
+  For the moment formula, let $U\sim\mathrm{Beta}(a,na)$.
+  For any $q>-a$,
+  \begin{equation*}
+    \expec[U^q]=\frac{B(a+q,na)}{B(a,na)}
+    =\frac{\Gamma(a+q)\Gamma(na)}{\Gamma((n+1)a+q)}\cdot
+    \frac{\Gamma((n+1)a)}{\Gamma(a)\Gamma(na)}
+    =\frac{\Gamma(a+q)\Gamma((n+1)a)}{\Gamma(a)\Gamma((n+1)a+q)}.
+  \end{equation*}
+  Multiplying by $(n+1)^q$ yields Equation~\eqref{eq:Eq-moment}.
+\end{proof}\par\medskip
+
+\begin{proof}[Proof of Theorem~\ref{thm:Tfull-bound}]
+  If $T_{\mathrm{full}}>t$, then in particular $W_{t-1}\ge (\alpha(n+1))^{-1}$.
+  Therefore,
+  \begin{equation*}
+    \prob(T_{\mathrm{full}}>t)
+    \le \prob\Big(W_{t-1}\ge \frac{1}{\alpha(n+1)}\Big).
+  \end{equation*}
+  Fix any $q\in(0,1)$.
+  By Markov's inequality,
+  \begin{equation*}
+    \prob\Big(W_{t-1}\ge \frac{1}{\alpha(n+1)}\Big)
+    =\prob\Big(W_{t-1}^q\ge (\alpha(n+1))^{-q}\Big)
+    \le (\alpha(n+1))^{q} \expec[W_{t-1}^q].
+  \end{equation*}
+  Since $W_{t-1}=\prod_{u=1}^{t-1} E_{u}$ and the $E_{u}$ are i.i.d., $\expec[W_{t-1}^q]=(\expec[E_{1}^q])^{t-1}$.
+  By Lemma~\ref{lem:beta-law},
+  \begin{equation*}
+    c_{a,q,n}\coloneqq \expec[E_{1}^q]
+    =(n+1)^q\frac{\Gamma(a+q)\Gamma((n+1)a)}{\Gamma(a)\Gamma((n+1)a+q)}.
+  \end{equation*}
+  Therefore,
+  \begin{equation*}
+    \prob(T_{\mathrm{full}}>t)\le (\alpha(n+1))^{q} c_{a,q,n}^{t-1},
+  \end{equation*}
+  which is Equation~\eqref{eq:Tfull-tail}.
+
+  It remains to justify that $c_{a,q,n}<1$ and to extract the $O(\log n)$ scaling.
+  Let $U\coloneqq E_{1}/(n+1)\sim\mathrm{Beta}(a,na)$, so $\expec[U]=1/(n+1)$ and $U$ is non-degenerate.
+  Since $q\in(0,1)$, strict concavity of $x\mapsto x^q$ implies $\expec[U^q]<(\expec[U])^q$, hence
+  \begin{equation*}
+    c_{a,q,n}
+    =(n+1)^q\expec[U^q]
+    < (n+1)^q\Big(\frac{1}{n+1}\Big)^q
+    =1.
+  \end{equation*}
+
+  For the limit, let $x\coloneqq (n+1)a$.
+  By Wendel's inequality, for all $q\in(0,1)$,
+  \begin{equation*}
+    1
+    \le x^q\frac{\Gamma(x)}{\Gamma(x+q)}
+    \le \Big(1+\frac{q}{x}\Big)^{1-q}.
+  \end{equation*}
+  Since $(1+q/x)^{1-q}\to 1$ as $x\to\infty$, we obtain
+  \begin{equation*}
+    c_{a,q,n}
+    =\frac{\Gamma(a+q)}{\Gamma(a)a^q}\cdot \Big(x^q\frac{\Gamma(x)}{\Gamma(x+q)}\Big)
+    \to c_{a,q}\coloneqq \frac{\Gamma(a+q)}{\Gamma(a)a^q}.
+  \end{equation*}
+  Since $X\sim\mathrm{Gamma}(a,1)$ is non-degenerate, strict concavity again gives $\expec[X^q]<(\expec[X])^q=a^q$, hence $c_{a,q}\in(0,1)$.
+
+  Finally, for any $\delta\in(0,1)$, choosing $t$ such that $(\alpha(n+1))^{q} c_{a,q,n}^{t-1}\le \delta$ ensures $\prob(T_{\mathrm{full}}>t)\le \delta$.
+  Equivalently, it suffices that
+  \begin{equation*}
+    t
+    \ge 1+\frac{\log((\alpha(n+1))^q/\delta)}{-\log(c_{a,q,n})},
+  \end{equation*}
+  which yields $T_{\mathrm{full}}=O(\log n)$ with probability at least $1-\delta$ as $n\to\infty$ since $c_{a,q,n}\to c_{a,q}\in(0,1)$.
+\end{proof}
+
+
+% \section{Dataset and experimental details}
+% \label{app:datasets}
+
+% \paragraph{Datasets and predictors.}
+
+% \emph{\textbf{Regression} - California Housing.} \\
+% We used the California Housing dataset~\citep{california_housing}, which contains $20{,}640$ census tract observations with $8$ geographic and demographic features and a continuous target (median house value, in units of \$100{,}000).
+% A Gradient Boosted Regressor (GBR) was trained on a random $70\%$ split ($14{,}448$ samples) and the remaining $30\%$ ($6{,}192$ samples) were reserved for sequential evaluation.
+% At deployment, the held-out data were partitioned into $T = 35$ consecutive batches; each batch was further divided into a calibration subset and a single test point.
+% The nonconformity score was the absolute residual $S(x,y) = |y - f(x)|$.
+
+% \emph{\textbf{Classification} - CIFAR-10.} \\
+% We used the CIFAR-10 benchmark~\citep{cifar10}, which consists of $50{,}000$ training and $10{,}000$ test images across $10$ balanced classes.
+% A ResNet-18~\citep{resnet18}, pre-trained on ImageNet~\citep{imagenet}, was fine-tuned on the CIFAR-10 training set for $10$ epochs with its final fully connected layer replaced to match the $10$-class output space.
+% The $10{,}000$ test images were partitioned into $T = 35$ sequential batches; as in the regression setting, each batch provided a calibration set and exactly one test point.
+% The nonconformity score follows the log-inverse-probability construction of~\citet{gauthier2025values}:
+% \begin{equation}
+%   \label{eq:clf-score}
+%   S(x, k)
+%   = \frac{1}{\bigl(\log(1 + p_f(k \mid x))\bigr)^{1/4}},
+% \end{equation}
+% where $p_f(k \mid x)$ is the softmax probability of class $k$ under the fine-tuned network.
+% The $\log(1+p)$ transformation ensures that $S > 1$ for all $p \in (0,1]$, preventing the product-martingale of the e-value baseline from collapsing prematurely across batches.
+% The calibration score for a labeled point $(x_i, y_i)$ is $S(x_i, y_i)$, and the candidate scores for an unlabeled test point $x$ are the full vector $(S(x,k))_{k=1}^{10}$.
+
+% \paragraph{Batch structure.}
+% Both tasks shared the same sequential protocol, reflecting the framework of Section~\ref{sec:batch}.
+% At each timestep $t \in \{1, \dots, 35\}$, a batch arrives containing $m_t$ labeled calibration points $(X_{t,i}, Y_{t,i})$ and a single unlabeled test feature $X_{t,n_t}$.
+% Within-batch exchangeability (Assumption of Section~\ref{sec:batch}) holds by construction: in the stationary setting the batch is an i.i.d.\ draw from a fixed distribution, and in the drift setting (described below) the shift is applied identically to all points in the batch before the conformal scores are computed, so the ranks remain exchangeable within the batch.
+
+% \paragraph{Distribution drift.}
+% To assess robustness under non-stationary conditions, we introduce gradual, batch-progressive drift that preserves within-batch exchangeability.
+% In all drift experiments, the shift magnitude at batch $t$ is proportional to the progress fraction $\rho_t = (t-1)/(T-1) \in [0,1]$, so the distribution is unperturbed at $t = 1$ and maximally shifted at $t = T$.
+
+% \emph{No-drift setting (ND).}
+% Batches are drawn i.i.d. from the held-out partition with no modification.
+% This is the canonical exchangeable setting in which conformal guarantees hold unconditionally.
+
+% \emph{Drift setting (D).}
+% Two complementary drift mechanisms are applied simultaneously.
+
+% \begin{itemize}
+%   \item \textbf{Regression.}
+%     \emph{Covariate drift}: all $8$ input features are shifted by a constant offset $0.5 \cdot \rho_t$, simulating a gradual change in the census-tract covariate distribution.
+%     \emph{Target drift}: independent Gaussian noise $\varepsilon \sim \mathcal{N}(0,\, (0.3 \cdot \rho_t)^2)$ is added to the house-value target, so the label noise standard deviation grows from zero at batch $1$ to $0.3$ at batch $T = 35$.
+
+%   \item \textbf{Classification.}
+%     \emph{Covariate drift}: pixel brightness is increased by $0.5 \cdot \rho_t$ (with values clipped to $[0,1]$), degrading input quality progressively.
+%     \emph{Label drift}: a fraction $0.3 \cdot \rho_t$ of labels in each batch are uniformly flipped to a randomly chosen different class, introducing increasing annotation noise.
+% \end{itemize}
+
+% Both mechanisms were applied before computing conformal scores, so the test statistic and calibration scores in any given batch remain jointly exchangeable.
+% The drift therefore tests how each method responds to a deteriorating data-generating process without voiding the fundamental structural assumption of Section~\ref{sec:batch}.
+
+% \paragraph{Dataset previews.}
+% The following figures illustrate the two benchmarks used in our experiments.
+% We show both the stationary data distribution and the effect of the drift mechanisms described above.
+
+% The California Housing dataset combines geographic and demographic features with a continuous target (median house value).
+% \begin{figure}[H]
+%   \centering
+%   \includegraphics[width=0.95\textwidth]{dataset_previews/california_housing_preview_two-panel}
+%   \caption{California Housing (stationary). Left: geographic distribution (longitude vs latitude, colored by median house value). Right: histograms of the eight features and the target.}
+%   \label{fig:california-preview}
+% \end{figure}
+
+% Under drift, covariate shift, and target noise progressively alter the feature and target distributions.
+% \begin{figure}[H]
+%   \centering
+%   \includegraphics[width=0.95\textwidth]{dataset_previews/california_housing_drift_preview_two-panel}
+%   \caption{California Housing under drift. Overlay of original (blue) and drifted (coral) distributions for each feature and the target at the final batch.}
+%   \label{fig:california-drift}
+% \end{figure}
+
+% CIFAR-10 provides 10-class image classification with balanced classes.
+% \begin{figure}[H]
+%   \centering
+%   \includegraphics[width=0.95\textwidth]{dataset_previews/cifar10_preview_multi-per-class}
+%   \caption{CIFAR-10 (stationary). Five sample images per class across the ten classes.}
+%   \label{fig:cifar10-preview}
+% \end{figure}
+
+% The classification drift combines increased pixel brightness and label noise.
+% \begin{figure}[H]
+%   \centering
+%   \includegraphics[width=0.95\textwidth]{dataset_previews/cifar10_drift_preview_multi-per-class}
+%   \caption{CIFAR-10 under drift. Original (left) vs drifted (right) image pairs per class; drift applies brightness increase, and random label flips.}
+%   \label{fig:cifar10-drift}
+% \end{figure}
+
+\section{Dataset and Experimental Details}
+\label{app:datasets}
+
+This section provides a comprehensive description of the benchmarks and the sequential evaluation protocol used in our study. We evaluate our methods on two distinct tasks: a regression task and an image classification task, both of which are subjected to synthetic distribution drift to evaluate robustness under non-stationary conditions.
+
+\paragraph{Regression: California Housing.} 
+We utilize the California Housing dataset~\citep{california_housing}, originally derived from the 1990 U.S. Census. The dataset consists of $20{,}640$ observations, where each entry represents a specific census tract. The model's objective is to predict the \emph{median house value} ($Y \in \mathbb{R}$, measured in units of \$100{,}000). For each tract, we consider eight predictive features:
+\begin{itemize}
+    \item \textbf{Demographics}: Median income (\texttt{MedInc}), house age (\texttt{HouseAge}), and average occupancy (\texttt{AveOccup}).
+    \item \textbf{Housing Characteristics}: Average number of rooms (\texttt{AveRooms}) and bedrooms (\texttt{AveBedrms}) per household.
+    \item \textbf{Geographic/Scale}: Total population (\texttt{Population}), as well as the \texttt{Latitude} and \texttt{Longitude} of the tract.
+\end{itemize}
+
+A Gradient Boosted Regressor (GBR) was trained on a random $70\%$ split ($14{,}448$ samples), leaving $30\%$ ($6{,}192$ samples) for sequential testing. We use the absolute residual as the nonconformity score: $S(x,y) = |y - \hat{f}(x)|$, where $\hat{f}(x)$ is the point estimate from the GBR. The spatial distribution and histograms of these features are visualized in Figure~\ref{fig:california-preview}.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.95\textwidth]{california_housing_preview_two-panel}
+  \caption{California Housing (stationary). Left: geographic distribution (longitude vs latitude, colored by median house value). Right: histograms of the eight features and target.}
+  \label{fig:california-preview}
+\end{figure}
+
+\paragraph{Classification: CIFAR-10.} 
+The CIFAR-10 benchmark~\citep{cifar10} comprises $60{,}000$ color images of size $32 \times 32$ distributed equally across 10 classes: \emph{airplane, automobile, bird, cat, deer, dog, frog, horse, ship,} and \emph{truck}. We split the data into the standard $50{,}000$ training and $10{,}000$ test images (see Figure~\ref{fig:cifar10-preview}). 
+
+As a base predictor, we employ a ResNet-18 architecture~\citep{resnet18} pre-trained on ImageNet~\citep{imagenet}. We fine-tuned the model on the CIFAR-10 training set for 10 epochs, replacing the final fully connected layer to output a 10-dimensional logit vector. To ensure numerical stability in sequential e-value martingales, we adopt the scoring construction from~\citet{gauthier2025values}:
+\begin{equation}
+  \label{eq:clf-score}
+  S(x, k) = \frac{1}{\bigl(\log(1 + p_f(k \mid x))\bigr)^{1/4}},
+\end{equation}
+where $p_f(k \mid x)$ is the softmax probability assigned to class $k$. The $\log(1+p)$ transformation bounds the scores away from zero ($S > 1$ for all $p \in (0,1]$), preventing the product-martingale of the e-value baseline from collapsing prematurely across batches.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.9\textwidth]{cifar10_preview_multi-per-class}
+  \caption{CIFAR-10 (stationary). Five sample images per class across the ten classes.}
+  \label{fig:cifar10-preview}
+\end{figure}
+
+\paragraph{Batch Structure and Distribution Drift.}
+Both tasks share a sequential protocol reflecting the framework of Section~\ref{sec:batch}. The $30\%$ held-out data (Regression) and the test set (Classification) are partitioned into $T = 35$ consecutive batches. At each timestep $t \in \{1, \dots, 35\}$, a batch arrives containing $m_t$ labeled calibration points and a single unlabeled test point $X_{t,n_t}$. 
+
+To evaluate robustness, we introduce a progressive drift magnitude $\rho_t = (t-1)/(T-1) \in [0,1]$.
+\begin{itemize}
+  \item \textbf{Regression Drift}: We simulate geographic/economic shifts by adding a constant offset of $0.5 \cdot \rho_t$ to all eight features. We also introduce \emph{target noise} by adding $\varepsilon \sim \mathcal{N}(0,\, (0.3 \cdot \rho_t)^2)$ to the house values, simulating increasing market volatility (see Figure~\ref{fig:california-drift}).
+  \item \textbf{Classification Drift}: We simulate sensor degradation by increasing pixel brightness by $0.5 \cdot \rho_t$ and introduce \emph{label noise} by flipping a fraction $0.3 \cdot \rho_t$ of labels to a random different class (see Figure~\ref{fig:cifar10-drift}).
+\end{itemize}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{california_housing_drift_preview_two-panel}
+  \caption{California Housing under drift. Overlay of original (blue) and drifted (coral) distributions for each feature and the target at the final batch.}
+  \label{fig:california-drift}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\textwidth]{cifar10_drift_preview_multi-per-class}
+  \caption{CIFAR-10 under drift. Original (left) vs drifted (right) image pairs per class; drift applies brightness increase and random label flips.}
+  \label{fig:cifar10-drift}
+\end{figure}
+
+
+  \section{Complete Results Tables}
+  \label{app:complete_results}
+
+  This section reports full experimental results across different configurations: number of batches $T \in \{15, 35\}$, number of independent runs $\in \{20, 50\}$, and replanning implementation (old vs.\ new).
+  \textbf{W}: window failure rate; \textbf{S}: mean prediction set size (interval width for regression; set cardinality for classification); $\pm$ denotes standard deviation across runs.
+
+\subsection{$T = 35$ batches, 20 runs, new replanning (main table)}
+\label{app:results-35-20-new}
+
+\begin{table}[ht]
+  \centering
+  \caption{Results with $T = 35$ batches, 20 runs, new replanning implementation. This configuration corresponds to Table~\ref{tab:results} in the main text.}
+  \label{tab:results-35-20-new}
+  \small
+  \begin{tabular}{@{}l|cc|cc|cc|cc@{}}
+    \toprule
+                             & \multicolumn{2}{c|}{Reg.\ ND}
+                             & \multicolumn{2}{c|}{Reg.\ D}
+                             & \multicolumn{2}{c|}{Clf.\ ND}
+                             & \multicolumn{2}{c}{Clf.\ D}                                                                                                                         \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+    Method                   & W                             & S            & W               & S            & W               & S               & W               & S             \\
+    \midrule
+    Anytime                  & --                            & $287{\pm}45$ & --              & $289{\pm}42$ & --              & $7.3{\pm}3.7$   & --              & $9.6{\pm}1.6$ \\
+    Anyhow (all-ones)        & $0.0{\pm}0.0$                 & $300{\pm}0$  & $0.0{\pm}0.0$   & $300{\pm}0$  & $0.0{\pm}0.0$   & $10{\pm}0$      & $0.0{\pm}0.0$   & $10{\pm}0$    \\
+    Anyhow (win. K=1)        & $0.09{\pm}0.04$               & $60{\pm}10$  & $0.08{\pm}0.05$ & $127{\pm}31$ & $0.10{\pm}0.05$ & $0.95{\pm}0.23$ & $0.07{\pm}0.04$ & $4.1{\pm}2.8$ \\
+    Anyhow (win. K=3)        & $0.11{\pm}0.08$               & $95{\pm}21$  & $0.10{\pm}0.08$ & $183{\pm}39$ & $0.07{\pm}0.08$ & $1.18{\pm}0.57$ & $0.02{\pm}0.03$ & $7.1{\pm}3.3$ \\
+    Anyhow (win. K=5)        & $0.06{\pm}0.09$               & $146{\pm}41$ & $0.04{\pm}0.07$ & $225{\pm}38$ & $0.05{\pm}0.09$ & $1.54{\pm}1.41$ & $0.04{\pm}0.07$ & $8.2{\pm}2.9$ \\
+    Anyhow replan (all-ones) & $0.0{\pm}0.0$                 & $287{\pm}37$ & $0.0{\pm}0.0$   & $296{\pm}20$ & $0.05{\pm}0.22$ & $9.7{\pm}1.6$   & $0.1{\pm}0.3$   & $9.8{\pm}1.2$ \\
+    Anyhow replan (win. K=1) & $0.08{\pm}0.05$               & $60{\pm}10$  & $0.07{\pm}0.04$ & $127{\pm}31$ & $0.08{\pm}0.04$ & $1.0{\pm}0.3$   & $0.04{\pm}0.03$ & $4.2{\pm}2.8$ \\
+    Anyhow replan (win. K=3) & $0.10{\pm}0.09$               & $99{\pm}24$  & $0.10{\pm}0.09$ & $191{\pm}41$ & $0.04{\pm}0.06$ & $3.9{\pm}4.1$   & $0.04{\pm}0.05$ & $7.4{\pm}3.2$ \\
+    Anyhow replan (win. K=5) & $0.09{\pm}0.11$               & $144{\pm}45$ & $0.07{\pm}0.08$ & $218{\pm}38$ & $0.07{\pm}0.11$ & $6.5{\pm}4.3$   & $0.07{\pm}0.11$ & $8.5{\pm}2.7$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+
+\subsection{$T = 35$ batches, 20 runs, old replanning}
+\label{app:results-35-20-old}
+
+\begin{table}[ht]
+  \centering
+  \caption{Results with $T = 35$ batches, 20 runs, old replanning implementation.}
+  \label{tab:results-35-20-old}
+  \small
+  \begin{tabular}{@{}l|cc|cc|cc|cc@{}}
+    \toprule
+                             & \multicolumn{2}{c|}{Reg.\ ND}
+                             & \multicolumn{2}{c|}{Reg.\ D}
+                             & \multicolumn{2}{c|}{Clf.\ ND}
+                             & \multicolumn{2}{c}{Clf.\ D}                                                                                                                          \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+    Method                   & W                             & S            & W               & S            & W               & S               & W               & S              \\
+    \midrule
+    Anytime                  & --                            & $291{\pm}37$ & --              & $292{\pm}35$ & --              & $6.2{\pm}4.0$   & --              & $9.8{\pm}1.3$  \\
+    Anyhow (all-ones)        & $0.00{\pm}0.00$               & $300{\pm}0$  & $0.00{\pm}0.00$ & $300{\pm}0$  & $0.00{\pm}0.00$ & $10.0{\pm}0.0$  & $0.00{\pm}0.00$ & $10.0{\pm}0.0$ \\
+    Anyhow (win. K=1)        & $0.10{\pm}0.04$               & $59{\pm}9$   & $0.09{\pm}0.04$ & $127{\pm}32$ & $0.09{\pm}0.05$ & $0.96{\pm}0.23$ & $0.07{\pm}0.04$ & $4.0{\pm}2.7$  \\
+    Anyhow (win. K=3)        & $0.14{\pm}0.10$               & $95{\pm}21$  & $0.10{\pm}0.08$ & $183{\pm}40$ & $0.10{\pm}0.09$ & $1.23{\pm}0.68$ & $0.03{\pm}0.06$ & $7.2{\pm}3.2$  \\
+    Anyhow (win. K=5)        & $0.11{\pm}0.12$               & $147{\pm}40$ & $0.08{\pm}0.08$ & $224{\pm}38$ & $0.10{\pm}0.10$ & $1.59{\pm}1.43$ & $0.00{\pm}0.02$ & $8.5{\pm}2.7$  \\
+    Anyhow replan (all-ones) & $0.00{\pm}0.00$               & $300{\pm}7$  & $0.00{\pm}0.00$ & $300{\pm}7$  & $0.00{\pm}0.00$ & $10.0{\pm}0.0$  & $0.00{\pm}0.00$ & $10.0{\pm}0.3$ \\
+    Anyhow replan (win. K=1) & $0.10{\pm}0.04$               & $59{\pm}9$   & $0.09{\pm}0.04$ & $127{\pm}32$ & $0.06{\pm}0.04$ & $1.02{\pm}0.24$ & $0.06{\pm}0.04$ & $4.3{\pm}2.7$  \\
+    Anyhow replan (win. K=3) & $0.12{\pm}0.10$               & $104{\pm}32$ & $0.10{\pm}0.09$ & $193{\pm}44$ & $0.10{\pm}0.08$ & $1.32{\pm}0.78$ & $0.04{\pm}0.06$ & $7.3{\pm}3.1$  \\
+    Anyhow replan (win. K=5) & $0.12{\pm}0.10$               & $160{\pm}65$ & $0.08{\pm}0.08$ & $224{\pm}43$ & $0.13{\pm}0.11$ & $1.46{\pm}1.08$ & $0.02{\pm}0.05$ & $8.4{\pm}2.7$  \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{$T = 15$ batches, 50 runs, old replanning}
+\label{app:results-15-50-old}
+
+\begin{table}[ht]
+  \centering
+  \caption{Results with $T = 15$ batches, 50 runs, old replanning implementation.}
+  \label{tab:results-15-50-old}
+  \small
+  \begin{tabular}{@{}l|cc|cc|cc|cc@{}}
+    \toprule
+                             & \multicolumn{2}{c|}{Reg.\ ND}
+                             & \multicolumn{2}{c|}{Reg.\ D}
+                             & \multicolumn{2}{c|}{Clf.\ ND}
+                             & \multicolumn{2}{c}{Clf.\ D}                                                                                                                         \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+    Method                   & W                             & S            & W               & S            & W               & S               & W               & S             \\
+    \midrule
+    Anytime                  & --                            & $276{\pm}59$ & --              & $286{\pm}44$ & --              & $4.4{\pm}3.6$   & --              & $9.6{\pm}1.6$ \\
+    Anyhow (all-ones)        & $0.04{\pm}0.20$               & $177{\pm}38$ & $0.10{\pm}0.30$ & $240{\pm}33$ & $0.10{\pm}0.30$ & $2.0{\pm}2.0$   & $0.00{\pm}0.00$ & $9.3{\pm}1.9$ \\
+    Anyhow (win. K=1)        & $0.10{\pm}0.06$               & $56{\pm}6$   & $0.10{\pm}0.09$ & $121{\pm}28$ & $0.12{\pm}0.09$ & $0.93{\pm}0.25$ & $0.05{\pm}0.06$ & $4.1{\pm}2.7$ \\
+    Anyhow (win. K=3)        & $0.12{\pm}0.14$               & $90{\pm}14$  & $0.10{\pm}0.14$ & $179{\pm}36$ & $0.14{\pm}0.18$ & $1.14{\pm}0.43$ & $0.03{\pm}0.09$ & $7.0{\pm}3.2$ \\
+    Anyhow (win. K=5)        & $0.11{\pm}0.20$               & $113{\pm}19$ & $0.12{\pm}0.22$ & $203{\pm}37$ & $0.12{\pm}0.19$ & $1.34{\pm}0.86$ & $0.01{\pm}0.07$ & $8.1{\pm}2.9$ \\
+    Anyhow replan (all-ones) & $0.02{\pm}0.14$               & $179{\pm}41$ & $0.10{\pm}0.30$ & $240{\pm}33$ & $0.10{\pm}0.30$ & $2.0{\pm}2.0$   & $0.00{\pm}0.00$ & $9.2{\pm}2.0$ \\
+    Anyhow replan (win. K=1) & $0.10{\pm}0.06$               & $56{\pm}6$   & $0.10{\pm}0.09$ & $121{\pm}28$ & $0.08{\pm}0.07$ & $1.02{\pm}0.23$ & $0.05{\pm}0.06$ & $4.5{\pm}2.6$ \\
+    Anyhow replan (win. K=3) & $0.11{\pm}0.14$               & $92{\pm}16$  & $0.10{\pm}0.14$ & $181{\pm}38$ & $0.12{\pm}0.15$ & $1.23{\pm}0.59$ & $0.02{\pm}0.07$ & $7.1{\pm}3.1$ \\
+    Anyhow replan (win. K=5) & $0.10{\pm}0.19$               & $114{\pm}22$ & $0.12{\pm}0.22$ & $204{\pm}39$ & $0.11{\pm}0.19$ & $1.37{\pm}0.84$ & $0.02{\pm}0.09$ & $8.0{\pm}2.8$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+
+\subsection{$T = 15$ batches, 50 runs, new replanning}
+\label{app:results-15-50-new}
+
+\begin{table}[ht]
+  \centering
+  \caption{Results with $T = 15$ batches, 50 runs, new replanning implementation.}
+  \label{tab:results-15-50-new}
+  \small
+  \begin{tabular}{@{}l|cc|cc|cc|cc@{}}
+    \toprule
+                             & \multicolumn{2}{c|}{Reg.\ ND}
+                             & \multicolumn{2}{c|}{Reg.\ D}
+                             & \multicolumn{2}{c|}{Clf.\ ND}
+                             & \multicolumn{2}{c}{Clf.\ D}                                                                                                                         \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+    Method                   & W                             & S            & W               & S            & W               & S               & W               & S             \\
+    \midrule
+    Anytime                  & --                            & $273{\pm}62$ & --              & $287{\pm}41$ & --              & $4.3{\pm}3.5$   & --              & $9.4{\pm}1.9$ \\
+    Anyhow (all-ones)        & $0.10{\pm}0.30$               & $175{\pm}38$ & $0.14{\pm}0.35$ & $240{\pm}33$ & $0.04{\pm}0.20$ & $1.9{\pm}1.8$   & $0.00{\pm}0.00$ & $9.1{\pm}2.1$ \\
+    Anyhow (win. K=1)        & $0.09{\pm}0.08$               & $56{\pm}6$   & $0.09{\pm}0.08$ & $122{\pm}29$ & $0.08{\pm}0.09$ & $0.95{\pm}0.22$ & $0.07{\pm}0.06$ & $4.0{\pm}2.8$ \\
+    Anyhow (win. K=3)        & $0.11{\pm}0.14$               & $91{\pm}14$  & $0.12{\pm}0.17$ & $178{\pm}36$ & $0.12{\pm}0.13$ & $1.14{\pm}0.47$ & $0.06{\pm}0.10$ & $6.8{\pm}3.3$ \\
+    Anyhow (win. K=5)        & $0.09{\pm}0.19$               & $113{\pm}19$ & $0.10{\pm}0.17$ & $201{\pm}37$ & $0.05{\pm}0.13$ & $1.30{\pm}0.73$ & $0.02{\pm}0.08$ & $7.8{\pm}3.0$ \\
+    Anyhow replan (all-ones) & $0.10{\pm}0.30$               & $205{\pm}64$ & $0.00{\pm}0.00$ & $248{\pm}38$ & $0.08{\pm}0.27$ & $9.1{\pm}2.6$   & $0.12{\pm}0.32$ & $9.4{\pm}1.9$ \\
+    Anyhow replan (win. K=1) & $0.10{\pm}0.09$               & $56{\pm}6$   & $0.09{\pm}0.09$ & $122{\pm}28$ & $0.08{\pm}0.07$ & $0.97{\pm}0.21$ & $0.04{\pm}0.04$ & $4.1{\pm}2.6$ \\
+    Anyhow replan (win. K=3) & $0.13{\pm}0.15$               & $91{\pm}15$  & $0.10{\pm}0.13$ & $180{\pm}37$ & $0.06{\pm}0.11$ & $4.3{\pm}4.2$   & $0.04{\pm}0.09$ & $7.5{\pm}3.2$ \\
+    Anyhow replan (win. K=5) & $0.12{\pm}0.19$               & $113{\pm}20$ & $0.13{\pm}0.19$ & $202{\pm}38$ & $0.10{\pm}0.17$ & $6.8{\pm}4.3$   & $0.02{\pm}0.07$ & $8.4{\pm}2.8$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% \section{Additional Experiments}
+% \label{app:add_experiments}
+
+% \input{appendix_figures}
+
+\end{document}

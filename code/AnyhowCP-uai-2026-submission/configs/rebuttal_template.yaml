@@ -1,0 +1,17 @@
+seed: 0
+alpha: 0.15
+T: 20
+num_runs: 100
+window_sizes: [1, 3, 5, 7, 9]
+solver: grid_milp
+forecast:
+  kind: ewma
+  decay: 0.7
+regression:
+  dataset: california_housing
+  model: gradient_boosting
+  calibration_size: 299
+classification:
+  dataset: cifar10_precomputed_logits
+  num_classes: 10
+  torch_allowed_only_for: offline_logits_or_feature_extraction
