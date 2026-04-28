@@ -1,0 +1,33 @@
+seed: 0
+alpha: 0.15
+T: 20
+num_runs: 100
+grid_points: 21
+data_dir: code/data
+out_dir: .workspace/experiments/rebuttal_protocol_regression_100_g21
+tasks: [regression]
+conditions: [nodrift, drift]
+window_sizes: []
+mask_families:
+  - name: shift_blocks_5x4
+    kind: block_partition
+    num_blocks: 5
+  - name: rolling_audit_4
+    kind: sliding_window
+    K: 4
+  - name: scheduled_high_risk_last5
+    kind: suffix
+    length: 5
+  - name: maintenance_every5
+    kind: cadence
+    every: 5
+forecasters: [last, mean, ewma, trend, blend]
+include_oracle: false
+smoothing:
+  kind: gaussian_cdf_spline
+  bandwidth: null
+  bandwidth_multiplier: 1.0
+  spline_points: 160
+forecast:
+  decay: 0.7
+  blend_weight: 0.35

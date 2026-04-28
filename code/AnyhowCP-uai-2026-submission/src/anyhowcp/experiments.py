@@ -19,8 +19,8 @@ from anyhowcp.costs import (
 )
 from anyhowcp.forecast import build_replanning_forecasts, forecast_error_summary
 from anyhowcp.masks import (
-    all_ones_masks,
     check_log_schedule,
+    named_mask_family,
     sliding_window_masks,
     uniform_log_schedule,
 )
@@ -115,6 +115,32 @@ def _batch_indices(n: int, T: int, rng: np.random.Generator, samples_per_batch: 
 def _summarize_runs(values: list[float]) -> dict[str, float]:
     arr = np.asarray(values, dtype=np.float64)
     return {"mean": float(arr.mean()), "std": float(arr.std(ddof=1)) if arr.size > 1 else 0.0}
+
+
+def _mask_specs_from_config(cfg: dict, T: int) -> list[dict]:
+    specs = []
+    for K in [int(k) for k in cfg.get("window_sizes", [1, 3, 5, 7, 9])]:
+        masks = sliding_window_masks(T, K)
+        name = "all_ones" if K == T else f"window_{K}"
+        specs.append(_mask_spec(name, "sliding_window", K, masks))
+    for raw in cfg.get("mask_families", []):
+        masks = named_mask_family(T, raw)
+        max_support = int(np.asarray(masks).sum(axis=1).max())
+        specs.append(_mask_spec(raw["name"], raw["kind"], max_support, masks))
+    return specs
+
+
+def _mask_spec(name: str, kind: str, K: int, masks: np.ndarray) -> dict:
+    M = np.asarray(masks, dtype=np.float64)
+    return {
+        "name": name,
+        "kind": kind,
+        "K": int(K),
+        "masks": M,
+        "num_masks": int(M.shape[0]),
+        "max_support": int(M.sum(axis=1).max()),
+        "density": float(M.mean()),
+    }
 
 
 def _evaluate_regression_schedule(records: list[dict], s: np.ndarray, masks: np.ndarray, alpha: float) -> dict:
@@ -278,7 +304,7 @@ def run_paper_experiments(cfg: dict) -> dict:
     T = int(cfg.get("T", 20))
     num_runs = int(cfg.get("num_runs", 100))
     grid_points = int(cfg.get("grid_points", 81))
-    window_sizes = [int(k) for k in cfg.get("window_sizes", [1, 3, 5, 7, 9])]
+    mask_specs = _mask_specs_from_config(cfg, T)
     tasks = list(cfg.get("tasks", ["regression", "classification"]))
     conditions = list(cfg.get("conditions", ["nodrift", "drift"]))
     forecasters = list(cfg.get("forecasters", ["ewma", "trend", "blend"]))
@@ -296,7 +322,7 @@ def run_paper_experiments(cfg: dict) -> dict:
             "config": cfg,
             "rows": rows,
             "notes": [
-                "W is the mean fraction of failed sliding windows across runs.",
+                "W is the mean fraction of failed monitored masks across runs.",
                 "S is interval width for regression and set cardinality for classification.",
                 "oracle uses realized future costs and is a diagnostic upper bound, not deployable.",
             ],
@@ -338,8 +364,9 @@ def run_paper_experiments(cfg: dict) -> dict:
                     raise ValueError(f"unknown task {task!r}")
                 run_cache.append((costs, records, eval_fn))
 
-            for K in window_sizes:
-                masks = sliding_window_masks(T, K)
+            for spec in mask_specs:
+                masks = spec["masks"]
+                K = spec["K"]
                 method_metrics: dict[str, list[dict]] = {"uniform": []}
                 for kind in forecasters:
                     method_metrics[f"replan_{kind}"] = []
@@ -356,12 +383,17 @@ def run_paper_experiments(cfg: dict) -> dict:
                             "condition": condition,
                             "run": run,
                             "K": K,
+                            "mask_family": spec["name"],
+                            "mask_kind": spec["kind"],
+                            "num_masks": spec["num_masks"],
+                            "max_support": spec["max_support"],
+                            "mask_density": spec["density"],
                             "method": "uniform",
-                                **metric,
-                            }
-                        )
+                            **metric,
+                        }
+                    )
 
-                    if K == 1:
+                    if spec["max_support"] == 1:
                         # Singleton masks decouple time steps. Since all empirical costs
                         # are decreasing in s, every deployable forecaster chooses the
                         # same maximal feasible per-time allocation as uniform spending.
@@ -375,6 +407,11 @@ def run_paper_experiments(cfg: dict) -> dict:
                                     "condition": condition,
                                     "run": run,
                                     "K": K,
+                                    "mask_family": spec["name"],
+                                    "mask_kind": spec["kind"],
+                                    "num_masks": spec["num_masks"],
+                                    "max_support": spec["max_support"],
+                                    "mask_density": spec["density"],
                                     "method": name,
                                     **copied,
                                 }
@@ -403,6 +440,11 @@ def run_paper_experiments(cfg: dict) -> dict:
                                 "condition": condition,
                                 "run": run,
                                 "K": K,
+                                "mask_family": spec["name"],
+                                "mask_kind": spec["kind"],
+                                "num_masks": spec["num_masks"],
+                                "max_support": spec["max_support"],
+                                "mask_density": spec["density"],
                                 "method": name,
                                 **metric,
                             }
@@ -417,6 +459,11 @@ def run_paper_experiments(cfg: dict) -> dict:
                         "task": task,
                         "condition": condition,
                         "K": K,
+                        "mask_family": spec["name"],
+                        "mask_kind": spec["kind"],
+                        "num_masks": spec["num_masks"],
+                        "max_support": spec["max_support"],
+                        "mask_density": spec["density"],
                         "method": method,
                         "W_mean": W["mean"],
                         "W_std": W["std"],
@@ -441,7 +488,7 @@ def run_paper_experiments(cfg: dict) -> dict:
         "config": cfg,
         "rows": rows,
         "notes": [
-            "W is the mean fraction of failed sliding windows across runs.",
+            "W is the mean fraction of failed monitored masks across runs.",
             "S is interval width for regression and set cardinality for classification.",
             "oracle uses realized future costs and is a diagnostic upper bound, not deployable.",
         ],

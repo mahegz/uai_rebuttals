@@ -1,6 +1,16 @@
 .agents
 .claude/
 .workspace/reproduction/
+.workspace/experiments/*
+!.workspace/experiments/rebuttal_expanded_g21/
+!.workspace/experiments/rebuttal_expanded_g21/summary.json
+!.workspace/experiments/rebuttal_expanded_g21/per_run.jsonl
+!.workspace/experiments/rebuttal_core_100_g21/
+!.workspace/experiments/rebuttal_core_100_g21/summary.json
+!.workspace/experiments/rebuttal_core_100_g21/per_run.jsonl
+!.workspace/experiments/rebuttal_protocol_regression_100_g21/
+!.workspace/experiments/rebuttal_protocol_regression_100_g21/summary.json
+!.workspace/experiments/rebuttal_protocol_regression_100_g21/per_run.jsonl
 code/data/
 *.zip
 __pycache__/
@@ -8,5 +18,5 @@ __pycache__/
 *.egg-info/
 .DS_Store
 
-# Keep compact experiment summaries and reports trackable by force-adding them
-# when needed; raw rerun data can be large and should stay local unless requested.
+# Keep only curated rebuttal experiment artifacts visible to Git. Scratch smoke
+# and pilot reruns stay local unless explicitly promoted.

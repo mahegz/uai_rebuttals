@@ -1,223 +1,304 @@
 # UAI Rebuttal Experiment Report
 
-This report summarizes the rerun in the cleaned rebuttal codebase. The run uses the paper's core axes: California Housing regression and CIFAR-10 classification; no-drift and drift settings; `T=20`; `alpha=0.15`; and sliding-window masks `K in {1,3,5,7,9}`. It also extends the paper-facing sweep with multiple deployable forecasters and an offline oracle diagnostic.
+This report summarizes the many-seed rebuttal reruns from the cleaned AnyhowCP codebase. The goal is targeted rebuttal evidence, not a new empirical section: the core run reproduces the paper-facing drift/no-drift and mask-strength axes, while the protocol run shows masks defined by deployment/audit schedules.
 
-## Run Configuration
+## Runs
 
-- Summary file: `.workspace/experiments/rebuttal_expanded_g21/summary.json`
-- Output directory: `.workspace/experiments/rebuttal_expanded_g21`
-- Runs: `30`
+- Core frontier summary: `.workspace/experiments/rebuttal_core_100_g21/summary.json`
+- Core frontier output: `.workspace/experiments/rebuttal_core_100_g21`
+- Core frontier runs: `100`
+- Core frontier masks: `[1, 3, 5, 7, 9, 20]` where `K=20` is the all-ones alpha-spending endpoint.
+- Protocol summary: `.workspace/experiments/rebuttal_protocol_regression_100_g21/summary.json`
+- Protocol output: `.workspace/experiments/rebuttal_protocol_regression_100_g21`
+- Protocol runs: `100`
+- Protocol mask families: `shift_blocks_5x4, rolling_audit_4, scheduled_high_risk_last5, maintenance_every5`
+- Alpha: `0.15`
 - Grid points: `21`
-- Tasks: `regression, classification`
-- Conditions: `nodrift, drift`
-- Window sizes: `[1, 3, 5, 7, 9]`
-- Forecasters: `last, mean, ewma, trend, blend`
-- Oracle diagnostic included: `True`
 
-Metrics: `W` is the mean fraction of monitored sliding windows containing at least one miscoverage. `S` is interval width for regression and set cardinality for classification. Lower `S` is better, while `W` should be interpreted relative to the target `alpha=0.15` with Monte Carlo variability.
-
-## Best Deployable Method By Setting
-
-| Task | Condition | K | Best method | S | W | Best replan | Replan S | Replan W |
-|---|---|---:|---|---:|---:|---|---:|---:|
-| classification | drift | 1 | uniform | 3.917 | 0.143 | replan_last | 3.917 | 0.143 |
-| classification | drift | 3 | uniform | 6.690 | 0.141 | replan_blend | 6.692 | 0.176 |
-| classification | drift | 5 | replan_mean | 7.540 | 0.206 | replan_mean | 7.540 | 0.206 |
-| classification | drift | 7 | replan_ewma | 7.905 | 0.217 | replan_ewma | 7.905 | 0.217 |
-| classification | drift | 9 | replan_mean | 8.352 | 0.192 | replan_mean | 8.352 | 0.192 |
-| classification | nodrift | 1 | uniform | 0.865 | 0.152 | replan_last | 0.865 | 0.152 |
-| classification | nodrift | 3 | uniform | 1.057 | 0.131 | replan_mean | 1.065 | 0.139 |
-| classification | nodrift | 5 | uniform | 1.170 | 0.142 | replan_last | 1.170 | 0.131 |
-| classification | nodrift | 7 | uniform | 1.277 | 0.138 | replan_last | 1.732 | 0.126 |
-| classification | nodrift | 9 | uniform | 1.385 | 0.153 | replan_last | 4.592 | 0.139 |
-| regression | drift | 1 | uniform | 190.787 | 0.168 | replan_last | 190.787 | 0.168 |
-| regression | drift | 3 | uniform | 320.575 | 0.154 | replan_mean | 327.535 | 0.115 |
-| regression | drift | 5 | replan_mean | 417.346 | 0.104 | replan_mean | 417.346 | 0.104 |
-| regression | drift | 7 | uniform | 463.015 | 0.090 | replan_mean | 466.428 | 0.093 |
-| regression | drift | 9 | replan_mean | 501.218 | 0.067 | replan_mean | 501.218 | 0.067 |
-| regression | nodrift | 1 | uniform | 134.542 | 0.178 | replan_last | 134.542 | 0.178 |
-| regression | nodrift | 3 | uniform | 233.324 | 0.161 | replan_mean | 239.004 | 0.161 |
-| regression | nodrift | 5 | replan_ewma | 308.282 | 0.106 | replan_ewma | 308.282 | 0.106 |
-| regression | nodrift | 7 | uniform | 343.881 | 0.100 | replan_mean | 353.415 | 0.117 |
-| regression | nodrift | 9 | replan_mean | 389.697 | 0.086 | replan_mean | 389.697 | 0.086 |
-
-## Forecasting Method Comparison
-
-Averaging across drift settings and mask sizes gives a coarse view of each method's efficiency. The oracle row uses realized future costs and is not deployable; it is included only to indicate the price paid for forecasting.
-
-| Task | Method | Avg S | Avg W |
-|---|---|---:|---:|
-| classification | oracle | 5.076 | 0.253 |
-| classification | replan_blend | 4.683 | 0.163 |
-| classification | replan_ewma | 4.575 | 0.181 |
-| classification | replan_last | 4.483 | 0.141 |
-| classification | replan_mean | 4.588 | 0.175 |
-| classification | replan_trend | 5.156 | 0.123 |
-| classification | uniform | 4.093 | 0.142 |
-| regression | oracle | 373.180 | 0.100 |
-| regression | replan_blend | 336.715 | 0.126 |
-| regression | replan_ewma | 333.349 | 0.121 |
-| regression | replan_last | 335.920 | 0.124 |
-| regression | replan_mean | 332.853 | 0.120 |
-| regression | replan_trend | 353.102 | 0.127 |
-| regression | uniform | 332.638 | 0.125 |
-
-## Full Result Table
-
-| Task | Condition | K | Method | S mean | S std | W mean | W std | Forecast MAE | Forecast RMSE | Deriv MAE |
-|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|
-| classification | drift | 1 | replan_blend | 3.917 | 0.527 | 0.143 | 0.080 | -- | -- | -- |
-| classification | drift | 1 | replan_ewma | 3.917 | 0.527 | 0.143 | 0.080 | -- | -- | -- |
-| classification | drift | 1 | replan_last | 3.917 | 0.527 | 0.143 | 0.080 | -- | -- | -- |
-| classification | drift | 1 | replan_mean | 3.917 | 0.527 | 0.143 | 0.080 | -- | -- | -- |
-| classification | drift | 1 | replan_trend | 3.917 | 0.527 | 0.143 | 0.080 | -- | -- | -- |
-| classification | drift | 1 | uniform | 3.917 | 0.527 | 0.143 | 0.080 | -- | -- | -- |
-| classification | drift | 3 | oracle | 6.215 | 0.616 | 0.206 | 0.147 | 0.000 | 0.000 | 0.000 |
-| classification | drift | 3 | replan_blend | 6.692 | 0.660 | 0.176 | 0.157 | 3.357 | 4.390 | 0.287 |
-| classification | drift | 3 | replan_ewma | 6.692 | 0.601 | 0.167 | 0.116 | 2.740 | 3.310 | 0.239 |
-| classification | drift | 3 | replan_last | 6.830 | 0.694 | 0.165 | 0.161 | 2.984 | 3.831 | 0.270 |
-| classification | drift | 3 | replan_mean | 6.725 | 0.645 | 0.144 | 0.105 | 2.822 | 3.327 | 0.237 |
-| classification | drift | 3 | replan_trend | 6.993 | 0.695 | 0.143 | 0.135 | 4.786 | 6.659 | 0.375 |
-| classification | drift | 3 | uniform | 6.690 | 0.540 | 0.141 | 0.098 | -- | -- | -- |
-| classification | drift | 5 | oracle | 6.978 | 0.567 | 0.296 | 0.225 | 0.000 | 0.000 | 0.000 |
-| classification | drift | 5 | replan_blend | 7.720 | 0.668 | 0.175 | 0.176 | 3.357 | 4.390 | 0.287 |
-| classification | drift | 5 | replan_ewma | 7.565 | 0.703 | 0.231 | 0.173 | 2.740 | 3.310 | 0.239 |
-| classification | drift | 5 | replan_last | 7.812 | 0.683 | 0.171 | 0.184 | 2.984 | 3.831 | 0.270 |
-| classification | drift | 5 | replan_mean | 7.540 | 0.643 | 0.206 | 0.187 | 2.822 | 3.327 | 0.237 |
-| classification | drift | 5 | replan_trend | 8.185 | 0.546 | 0.119 | 0.171 | 4.786 | 6.659 | 0.375 |
-| classification | drift | 5 | uniform | 7.667 | 0.583 | 0.158 | 0.173 | -- | -- | -- |
-| classification | drift | 7 | oracle | 7.442 | 0.489 | 0.321 | 0.258 | 0.000 | 0.000 | 0.000 |
-| classification | drift | 7 | replan_blend | 8.042 | 0.625 | 0.133 | 0.205 | 3.357 | 4.390 | 0.287 |
-| classification | drift | 7 | replan_ewma | 7.905 | 0.678 | 0.217 | 0.252 | 2.740 | 3.310 | 0.239 |
-| classification | drift | 7 | replan_last | 8.192 | 0.766 | 0.143 | 0.204 | 2.984 | 3.831 | 0.270 |
-| classification | drift | 7 | replan_mean | 7.922 | 0.670 | 0.190 | 0.222 | 2.822 | 3.327 | 0.237 |
-| classification | drift | 7 | replan_trend | 8.783 | 0.561 | 0.100 | 0.165 | 4.786 | 6.659 | 0.375 |
-| classification | drift | 7 | uniform | 8.337 | 0.539 | 0.119 | 0.189 | -- | -- | -- |
-| classification | drift | 9 | oracle | 7.703 | 0.439 | 0.325 | 0.339 | 0.000 | 0.000 | 0.000 |
-| classification | drift | 9 | replan_blend | 8.448 | 0.597 | 0.189 | 0.296 | 3.357 | 4.390 | 0.287 |
-| classification | drift | 9 | replan_ewma | 8.373 | 0.693 | 0.217 | 0.311 | 2.740 | 3.310 | 0.239 |
-| classification | drift | 9 | replan_last | 8.642 | 0.546 | 0.111 | 0.265 | 2.984 | 3.831 | 0.270 |
-| classification | drift | 9 | replan_mean | 8.352 | 0.669 | 0.192 | 0.277 | 2.822 | 3.327 | 0.237 |
-| classification | drift | 9 | replan_trend | 8.838 | 0.378 | 0.153 | 0.290 | 4.786 | 6.659 | 0.375 |
-| classification | drift | 9 | uniform | 8.567 | 0.522 | 0.142 | 0.227 | -- | -- | -- |
-| classification | nodrift | 1 | replan_blend | 0.865 | 0.078 | 0.152 | 0.074 | -- | -- | -- |
-| classification | nodrift | 1 | replan_ewma | 0.865 | 0.078 | 0.152 | 0.074 | -- | -- | -- |
-| classification | nodrift | 1 | replan_last | 0.865 | 0.078 | 0.152 | 0.074 | -- | -- | -- |
-| classification | nodrift | 1 | replan_mean | 0.865 | 0.078 | 0.152 | 0.074 | -- | -- | -- |
-| classification | nodrift | 1 | replan_trend | 0.865 | 0.078 | 0.152 | 0.074 | -- | -- | -- |
-| classification | nodrift | 1 | uniform | 0.865 | 0.078 | 0.152 | 0.074 | -- | -- | -- |
-| classification | nodrift | 3 | oracle | 1.057 | 0.134 | 0.169 | 0.169 | 0.000 | 0.000 | 0.000 |
-| classification | nodrift | 3 | replan_blend | 1.185 | 0.225 | 0.143 | 0.151 | 1.292 | 1.709 | 0.221 |
-| classification | nodrift | 3 | replan_ewma | 1.085 | 0.124 | 0.137 | 0.154 | 1.012 | 1.254 | 0.172 |
-| classification | nodrift | 3 | replan_last | 1.082 | 0.090 | 0.133 | 0.152 | 1.159 | 1.520 | 0.197 |
-| classification | nodrift | 3 | replan_mean | 1.065 | 0.063 | 0.139 | 0.152 | 1.000 | 1.231 | 0.168 |
-| classification | nodrift | 3 | replan_trend | 1.310 | 0.371 | 0.139 | 0.160 | 1.730 | 2.411 | 0.312 |
-| classification | nodrift | 3 | uniform | 1.057 | 0.054 | 0.131 | 0.146 | -- | -- | -- |
-| classification | nodrift | 5 | oracle | 2.362 | 0.745 | 0.196 | 0.205 | 0.000 | 0.000 | 0.000 |
-| classification | nodrift | 5 | replan_blend | 1.753 | 0.535 | 0.131 | 0.192 | 1.292 | 1.709 | 0.221 |
-| classification | nodrift | 5 | replan_ewma | 1.625 | 0.408 | 0.142 | 0.193 | 1.012 | 1.254 | 0.172 |
-| classification | nodrift | 5 | replan_last | 1.170 | 0.116 | 0.131 | 0.192 | 1.159 | 1.520 | 0.197 |
-| classification | nodrift | 5 | replan_mean | 1.653 | 0.385 | 0.142 | 0.193 | 1.000 | 1.231 | 0.168 |
-| classification | nodrift | 5 | replan_trend | 2.520 | 1.138 | 0.090 | 0.151 | 1.730 | 2.411 | 0.312 |
-| classification | nodrift | 5 | uniform | 1.170 | 0.113 | 0.142 | 0.193 | -- | -- | -- |
-| classification | nodrift | 7 | oracle | 4.018 | 0.683 | 0.226 | 0.290 | 0.000 | 0.000 | 0.000 |
-| classification | nodrift | 7 | replan_blend | 3.108 | 0.862 | 0.167 | 0.266 | 1.292 | 1.709 | 0.221 |
-| classification | nodrift | 7 | replan_ewma | 2.680 | 0.702 | 0.181 | 0.256 | 1.012 | 1.254 | 0.172 |
-| classification | nodrift | 7 | replan_last | 1.732 | 0.375 | 0.126 | 0.227 | 1.159 | 1.520 | 0.197 |
-| classification | nodrift | 7 | replan_mean | 2.730 | 0.791 | 0.186 | 0.264 | 1.000 | 1.231 | 0.168 |
-| classification | nodrift | 7 | replan_trend | 3.958 | 1.352 | 0.064 | 0.165 | 1.730 | 2.411 | 0.312 |
-| classification | nodrift | 7 | uniform | 1.277 | 0.175 | 0.138 | 0.237 | -- | -- | -- |
-| classification | nodrift | 9 | oracle | 4.832 | 0.596 | 0.289 | 0.366 | 0.000 | 0.000 | 0.000 |
-| classification | nodrift | 9 | replan_blend | 5.102 | 0.809 | 0.217 | 0.321 | 1.292 | 1.709 | 0.221 |
-| classification | nodrift | 9 | replan_ewma | 5.040 | 0.925 | 0.222 | 0.318 | 1.012 | 1.254 | 0.172 |
-| classification | nodrift | 9 | replan_last | 4.592 | 2.226 | 0.139 | 0.284 | 1.159 | 1.520 | 0.197 |
-| classification | nodrift | 9 | replan_mean | 5.112 | 0.906 | 0.256 | 0.345 | 1.000 | 1.231 | 0.168 |
-| classification | nodrift | 9 | replan_trend | 6.188 | 0.828 | 0.128 | 0.271 | 1.730 | 2.411 | 0.312 |
-| classification | nodrift | 9 | uniform | 1.385 | 0.244 | 0.153 | 0.288 | -- | -- | -- |
-| regression | drift | 1 | replan_blend | 190.787 | 3.367 | 0.168 | 0.062 | -- | -- | -- |
-| regression | drift | 1 | replan_ewma | 190.787 | 3.367 | 0.168 | 0.062 | -- | -- | -- |
-| regression | drift | 1 | replan_last | 190.787 | 3.367 | 0.168 | 0.062 | -- | -- | -- |
-| regression | drift | 1 | replan_mean | 190.787 | 3.367 | 0.168 | 0.062 | -- | -- | -- |
-| regression | drift | 1 | replan_trend | 190.787 | 3.367 | 0.168 | 0.062 | -- | -- | -- |
-| regression | drift | 1 | uniform | 190.787 | 3.367 | 0.168 | 0.062 | -- | -- | -- |
-| regression | drift | 3 | oracle | 324.537 | 9.013 | 0.124 | 0.140 | 0.000 | 0.000 | 0.000 |
-| regression | drift | 3 | replan_blend | 330.139 | 10.313 | 0.117 | 0.139 | 36.569 | 58.841 | 8.830 |
-| regression | drift | 3 | replan_ewma | 327.703 | 9.897 | 0.113 | 0.139 | 30.064 | 40.058 | 5.806 |
-| regression | drift | 3 | replan_last | 331.376 | 10.938 | 0.106 | 0.141 | 31.121 | 42.441 | 7.066 |
-| regression | drift | 3 | replan_mean | 327.535 | 10.004 | 0.115 | 0.138 | 33.579 | 42.807 | 5.672 |
-| regression | drift | 3 | replan_trend | 337.328 | 13.801 | 0.115 | 0.152 | 66.644 | 118.091 | 14.946 |
-| regression | drift | 3 | uniform | 320.575 | 8.741 | 0.154 | 0.143 | -- | -- | -- |
-| regression | drift | 5 | oracle | 413.263 | 12.790 | 0.077 | 0.173 | 0.000 | 0.000 | 0.000 |
-| regression | drift | 5 | replan_blend | 421.966 | 13.269 | 0.110 | 0.196 | 36.569 | 58.841 | 8.830 |
-| regression | drift | 5 | replan_ewma | 417.450 | 13.856 | 0.104 | 0.192 | 30.064 | 40.058 | 5.806 |
-| regression | drift | 5 | replan_last | 422.952 | 13.806 | 0.104 | 0.186 | 31.121 | 42.441 | 7.066 |
-| regression | drift | 5 | replan_mean | 417.346 | 11.641 | 0.104 | 0.192 | 33.579 | 42.807 | 5.672 |
-| regression | drift | 5 | replan_trend | 439.458 | 18.490 | 0.144 | 0.213 | 66.644 | 118.091 | 14.946 |
-| regression | drift | 5 | uniform | 424.250 | 12.083 | 0.094 | 0.183 | -- | -- | -- |
-| regression | drift | 7 | oracle | 467.860 | 15.911 | 0.079 | 0.210 | 0.000 | 0.000 | 0.000 |
-| regression | drift | 7 | replan_blend | 472.475 | 13.478 | 0.098 | 0.216 | 36.569 | 58.841 | 8.830 |
-| regression | drift | 7 | replan_ewma | 468.297 | 14.258 | 0.098 | 0.188 | 30.064 | 40.058 | 5.806 |
-| regression | drift | 7 | replan_last | 472.605 | 11.939 | 0.093 | 0.215 | 31.121 | 42.441 | 7.066 |
-| regression | drift | 7 | replan_mean | 466.428 | 14.467 | 0.093 | 0.215 | 33.579 | 42.807 | 5.672 |
-| regression | drift | 7 | replan_trend | 496.036 | 27.169 | 0.093 | 0.212 | 66.644 | 118.091 | 14.946 |
-| regression | drift | 7 | uniform | 463.015 | 12.783 | 0.090 | 0.215 | -- | -- | -- |
-| regression | drift | 9 | oracle | 502.071 | 16.013 | 0.061 | 0.187 | 0.000 | 0.000 | 0.000 |
-| regression | drift | 9 | replan_blend | 505.341 | 19.956 | 0.111 | 0.233 | 36.569 | 58.841 | 8.830 |
-| regression | drift | 9 | replan_ewma | 501.846 | 16.878 | 0.067 | 0.187 | 30.064 | 40.058 | 5.806 |
-| regression | drift | 9 | replan_last | 501.439 | 15.029 | 0.106 | 0.232 | 31.121 | 42.441 | 7.066 |
-| regression | drift | 9 | replan_mean | 501.218 | 14.782 | 0.067 | 0.187 | 33.579 | 42.807 | 5.672 |
-| regression | drift | 9 | replan_trend | 528.318 | 31.713 | 0.128 | 0.231 | 66.644 | 118.091 | 14.946 |
-| regression | drift | 9 | uniform | 509.528 | 14.738 | 0.089 | 0.238 | -- | -- | -- |
-| regression | nodrift | 1 | replan_blend | 134.542 | 2.099 | 0.178 | 0.089 | -- | -- | -- |
-| regression | nodrift | 1 | replan_ewma | 134.542 | 2.099 | 0.178 | 0.089 | -- | -- | -- |
-| regression | nodrift | 1 | replan_last | 134.542 | 2.099 | 0.178 | 0.089 | -- | -- | -- |
-| regression | nodrift | 1 | replan_mean | 134.542 | 2.099 | 0.178 | 0.089 | -- | -- | -- |
-| regression | nodrift | 1 | replan_trend | 134.542 | 2.099 | 0.178 | 0.089 | -- | -- | -- |
-| regression | nodrift | 1 | uniform | 134.542 | 2.099 | 0.178 | 0.089 | -- | -- | -- |
-| regression | nodrift | 3 | oracle | 236.318 | 6.520 | 0.156 | 0.148 | 0.000 | 0.000 | 0.000 |
-| regression | nodrift | 3 | replan_blend | 240.557 | 7.504 | 0.159 | 0.160 | 26.520 | 47.843 | 7.872 |
-| regression | nodrift | 3 | replan_ewma | 239.082 | 7.266 | 0.161 | 0.155 | 15.319 | 24.914 | 5.322 |
-| regression | nodrift | 3 | replan_last | 240.172 | 7.533 | 0.163 | 0.157 | 18.937 | 30.553 | 6.377 |
-| regression | nodrift | 3 | replan_mean | 239.004 | 7.112 | 0.161 | 0.155 | 15.107 | 24.512 | 5.244 |
-| regression | nodrift | 3 | replan_trend | 246.738 | 11.654 | 0.157 | 0.170 | 50.430 | 92.479 | 12.669 |
-| regression | nodrift | 3 | uniform | 233.324 | 6.521 | 0.161 | 0.155 | -- | -- | -- |
-| regression | nodrift | 5 | oracle | 303.329 | 10.799 | 0.144 | 0.172 | 0.000 | 0.000 | 0.000 |
-| regression | nodrift | 5 | replan_blend | 311.375 | 11.001 | 0.110 | 0.173 | 26.520 | 47.843 | 7.872 |
-| regression | nodrift | 5 | replan_ewma | 308.282 | 9.224 | 0.106 | 0.172 | 15.319 | 24.914 | 5.322 |
-| regression | nodrift | 5 | replan_last | 313.265 | 9.105 | 0.123 | 0.175 | 18.937 | 30.553 | 6.377 |
-| regression | nodrift | 5 | replan_mean | 308.559 | 9.775 | 0.115 | 0.188 | 15.107 | 24.512 | 5.244 |
-| regression | nodrift | 5 | replan_trend | 330.982 | 19.464 | 0.133 | 0.185 | 50.430 | 92.479 | 12.669 |
-| regression | nodrift | 5 | uniform | 311.288 | 9.517 | 0.115 | 0.173 | -- | -- | -- |
-| regression | nodrift | 7 | oracle | 350.759 | 13.805 | 0.093 | 0.187 | 0.000 | 0.000 | 0.000 |
-| regression | nodrift | 7 | replan_blend | 360.219 | 15.548 | 0.093 | 0.187 | 26.520 | 47.843 | 7.872 |
-| regression | nodrift | 7 | replan_ewma | 354.851 | 17.847 | 0.107 | 0.201 | 15.319 | 24.914 | 5.322 |
-| regression | nodrift | 7 | replan_last | 359.851 | 14.966 | 0.119 | 0.201 | 18.937 | 30.553 | 6.377 |
-| regression | nodrift | 7 | replan_mean | 353.415 | 16.644 | 0.117 | 0.202 | 15.107 | 24.512 | 5.244 |
-| regression | nodrift | 7 | replan_trend | 390.035 | 32.013 | 0.098 | 0.178 | 50.430 | 92.479 | 12.669 |
-| regression | nodrift | 7 | uniform | 343.881 | 11.208 | 0.100 | 0.190 | -- | -- | -- |
-| regression | nodrift | 9 | oracle | 387.305 | 15.628 | 0.067 | 0.197 | 0.000 | 0.000 | 0.000 |
-| regression | nodrift | 9 | replan_blend | 399.750 | 22.174 | 0.114 | 0.248 | 26.520 | 47.843 | 7.872 |
-| regression | nodrift | 9 | replan_ewma | 390.649 | 20.648 | 0.111 | 0.249 | 15.319 | 24.914 | 5.322 |
-| regression | nodrift | 9 | replan_last | 392.210 | 16.471 | 0.083 | 0.203 | 18.937 | 30.553 | 6.377 |
-| regression | nodrift | 9 | replan_mean | 389.697 | 20.393 | 0.086 | 0.218 | 15.107 | 24.512 | 5.244 |
-| regression | nodrift | 9 | replan_trend | 436.798 | 33.758 | 0.056 | 0.139 | 50.430 | 92.479 | 12.669 |
-| regression | nodrift | 9 | uniform | 395.195 | 16.214 | 0.097 | 0.222 | -- | -- | -- |
-
-## Paper Reproduction Notes
-
-- The rerun reproduces the paper's main mask-valid axes and drift protocols, but it is not an exact submitted-table clone: this compact run uses the rewritten flat package, a 21-point log-budget grid, and 30 Monte Carlo runs.
-- The submitted paper table used 100 runs and included the archived anytime/e-process baseline. The current rewritten runner focuses on mask-valid uniform spending and closed-loop replanning; the anytime baseline remains in the archived supplementary package.
-- Because the current repo intentionally separates the cleaned rebuttal runner from the archived full package, paper-table numerical equality should not be expected until the archived runner and rewritten runner are reconciled.
+Metrics: `W` is the mean fraction of monitored masks containing at least one miscoverage. `S` is interval width for regression and set cardinality for classification. Lower `S` is more efficient; empirical `W` should be read relative to `alpha` with Monte Carlo noise.
 
 ## Main Takeaways
 
-- Some empirical `W` estimates exceed `alpha=0.15` in the 30-run sweep; the largest deployable value is `0.256` for `classification/nodrift/K=9/replan_mean`. Treat these as finite-run estimates, not proof of invalidity.
-- Best observed deployable `classification` efficiency is `uniform` under `nodrift`, `K=1`, with `S=0.865` and `W=0.152`.
-- Best observed deployable `regression` efficiency is `uniform` under `nodrift`, `K=1`, with `S=134.542` and `W=0.178`.
-- Across task/condition/mask settings, the best replan method beats uniform spending in `7` settings and uniform is at least as efficient in `13` settings.
+- The largest deployable empirical `W` is `0.310` for `classification/drift/all_ones/replan_mean`. This is a finite-sample estimate over 100 seeds, not a formal invalidity claim.
+- In the core frontier, the best replan method is more efficient than uniform in `10` settings; uniform is at least as efficient in `14` settings.
+- In the protocol-mask regression run, the best replan method is more efficient than uniform in `4` settings; uniform is at least as efficient in `4` settings.
+- The all-ones endpoint is much less efficient than short-window monitoring in `S`, which is the useful rebuttal framing: ordinary alpha-spending is a special endpoint, while mask-valid contracts trade efficiency for the specific monitoring guarantee requested.
+- Protocol masks give the cleanest answer to the mask-choice objection: masks can be fixed from shifts, rolling audits, scheduled high-risk periods, or maintenance cadences before labels are observed.
 
-## Artifacts
+## Core Mask Frontier
 
-- Machine summary: `.workspace/experiments/rebuttal_expanded_g21/summary.json`
-- Per-run JSONL: `.workspace/experiments/rebuttal_expanded_g21/per_run.jsonl`
-- This report intentionally reports aggregate metrics and does not include raw CIFAR or California Housing data.
+| Task | Condition | Mask | Support | Uniform S | Uniform W | Best replan | Replan S | Replan W |
+|---|---|---|---:|---:|---:|---|---:|---:|
+| classification | drift | all_ones | 20 | 9.129 | 0.220 | replan_mean | 8.787 | 0.310 |
+| classification | drift | window_1 | 1 | 3.901 | 0.145 | replan_last | 3.901 | 0.145 |
+| classification | drift | window_3 | 3 | 6.770 | 0.148 | replan_blend | 6.712 | 0.174 |
+| classification | drift | window_5 | 5 | 7.676 | 0.144 | replan_mean | 7.491 | 0.186 |
+| classification | drift | window_7 | 7 | 8.319 | 0.134 | replan_mean | 7.891 | 0.186 |
+| classification | drift | window_9 | 9 | 8.573 | 0.137 | replan_mean | 8.300 | 0.212 |
+| classification | nodrift | all_ones | 20 | 1.839 | 0.180 | replan_last | 2.200 | 0.220 |
+| classification | nodrift | window_1 | 1 | 0.871 | 0.155 | replan_last | 0.871 | 0.155 |
+| classification | nodrift | window_3 | 3 | 1.051 | 0.174 | replan_mean | 1.055 | 0.169 |
+| classification | nodrift | window_5 | 5 | 1.164 | 0.160 | replan_last | 1.163 | 0.157 |
+| classification | nodrift | window_7 | 7 | 1.294 | 0.154 | replan_last | 1.842 | 0.143 |
+| classification | nodrift | window_9 | 9 | 1.393 | 0.164 | replan_last | 4.138 | 0.114 |
+| regression | drift | all_ones | 20 | 583.024 | 0.070 | replan_last | 591.845 | 0.060 |
+| regression | drift | window_1 | 1 | 191.608 | 0.144 | replan_last | 191.608 | 0.144 |
+| regression | drift | window_3 | 3 | 322.117 | 0.138 | replan_mean | 328.909 | 0.126 |
+| regression | drift | window_5 | 5 | 424.728 | 0.122 | replan_mean | 420.216 | 0.121 |
+| regression | drift | window_7 | 7 | 464.136 | 0.110 | replan_mean | 468.990 | 0.101 |
+| regression | drift | window_9 | 9 | 512.422 | 0.074 | replan_mean | 504.612 | 0.082 |
+| regression | nodrift | all_ones | 20 | 491.462 | 0.180 | replan_last | 508.339 | 0.170 |
+| regression | nodrift | window_1 | 1 | 135.061 | 0.166 | replan_last | 135.061 | 0.166 |
+| regression | nodrift | window_3 | 3 | 234.516 | 0.151 | replan_mean | 239.660 | 0.148 |
+| regression | nodrift | window_5 | 5 | 312.612 | 0.112 | replan_mean | 308.668 | 0.120 |
+| regression | nodrift | window_7 | 7 | 344.732 | 0.132 | replan_mean | 356.210 | 0.136 |
+| regression | nodrift | window_9 | 9 | 396.465 | 0.130 | replan_mean | 393.953 | 0.109 |
+
+## Protocol-Defined Regression Masks
+
+| Task | Condition | Mask | Support | Uniform S | Uniform W | Best replan | Replan S | Replan W |
+|---|---|---|---:|---:|---:|---|---:|---:|
+| regression | drift | maintenance_every5 | 4 | 696.655 | 0.090 | replan_ewma | 227.666 | 0.100 |
+| regression | drift | rolling_audit_4 | 4 | 364.881 | 0.126 | replan_mean | 370.987 | 0.122 |
+| regression | drift | scheduled_high_risk_last5 | 5 | 696.394 | 0.110 | replan_blend | 248.540 | 0.110 |
+| regression | drift | shift_blocks_5x4 | 4 | 364.881 | 0.120 | replan_blend | 370.479 | 0.126 |
+| regression | nodrift | maintenance_every5 | 4 | 673.890 | 0.130 | replan_last | 162.548 | 0.100 |
+| regression | nodrift | rolling_audit_4 | 4 | 266.853 | 0.141 | replan_mean | 271.605 | 0.143 |
+| regression | nodrift | scheduled_high_risk_last5 | 5 | 659.690 | 0.120 | replan_mean | 177.312 | 0.140 |
+| regression | nodrift | shift_blocks_5x4 | 4 | 266.853 | 0.138 | replan_mean | 271.064 | 0.150 |
+
+## Core Forecasting Method Averages
+
+| Task | Method | Avg S | Avg W |
+|---|---|---:|---:|
+| classification | replan_blend | 5.242 | 0.178 |
+| classification | replan_ewma | 5.093 | 0.198 |
+| classification | replan_last | 4.612 | 0.171 |
+| classification | replan_mean | 5.122 | 0.203 |
+| classification | replan_trend | 5.843 | 0.120 |
+| classification | uniform | 4.332 | 0.160 |
+| regression | replan_blend | 378.547 | 0.127 |
+| regression | replan_ewma | 371.571 | 0.121 |
+| regression | replan_last | 372.937 | 0.126 |
+| regression | replan_mean | 371.424 | 0.123 |
+| regression | replan_trend | 399.465 | 0.126 |
+| regression | uniform | 367.740 | 0.127 |
+
+## Protocol Forecasting Method Averages
+
+| Task | Method | Avg S | Avg W |
+|---|---|---:|---:|
+| regression | replan_blend | 264.484 | 0.124 |
+| regression | replan_ewma | 263.126 | 0.126 |
+| regression | replan_last | 264.644 | 0.122 |
+| regression | replan_mean | 262.660 | 0.125 |
+| regression | replan_trend | 277.617 | 0.119 |
+| regression | uniform | 498.762 | 0.122 |
+
+## Core Full Result Table
+
+| Task | Condition | Mask | Support | # masks | Density | Method | S mean | S std | W mean | W std | Forecast MAE | Forecast RMSE | Deriv MAE |
+|---|---|---|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|
+| classification | drift | all_ones | 20 | 1 | 1.000 | replan_blend | 9.068 | 0.492 | 0.250 | 0.435 | 3.273 | 4.253 | 0.287 |
+| classification | drift | all_ones | 20 | 1 | 1.000 | replan_ewma | 8.791 | 0.553 | 0.260 | 0.441 | 2.760 | 3.329 | 0.240 |
+| classification | drift | all_ones | 20 | 1 | 1.000 | replan_last | 8.912 | 0.504 | 0.270 | 0.446 | 2.974 | 3.821 | 0.270 |
+| classification | drift | all_ones | 20 | 1 | 1.000 | replan_mean | 8.787 | 0.561 | 0.310 | 0.465 | 2.875 | 3.381 | 0.241 |
+| classification | drift | all_ones | 20 | 1 | 1.000 | replan_trend | 9.441 | 0.249 | 0.160 | 0.368 | 4.503 | 6.085 | 0.370 |
+| classification | drift | all_ones | 20 | 1 | 1.000 | uniform | 9.129 | 0.404 | 0.220 | 0.416 | -- | -- | -- |
+| classification | drift | window_1 | 1 | 20 | 0.050 | replan_blend | 3.901 | 0.523 | 0.145 | 0.075 | -- | -- | -- |
+| classification | drift | window_1 | 1 | 20 | 0.050 | replan_ewma | 3.901 | 0.523 | 0.145 | 0.075 | -- | -- | -- |
+| classification | drift | window_1 | 1 | 20 | 0.050 | replan_last | 3.901 | 0.523 | 0.145 | 0.075 | -- | -- | -- |
+| classification | drift | window_1 | 1 | 20 | 0.050 | replan_mean | 3.901 | 0.523 | 0.145 | 0.075 | -- | -- | -- |
+| classification | drift | window_1 | 1 | 20 | 0.050 | replan_trend | 3.901 | 0.523 | 0.145 | 0.075 | -- | -- | -- |
+| classification | drift | window_1 | 1 | 20 | 0.050 | uniform | 3.901 | 0.523 | 0.145 | 0.075 | -- | -- | -- |
+| classification | drift | window_3 | 3 | 18 | 0.150 | replan_blend | 6.712 | 0.624 | 0.174 | 0.142 | 3.273 | 4.253 | 0.287 |
+| classification | drift | window_3 | 3 | 18 | 0.150 | replan_ewma | 6.728 | 0.585 | 0.171 | 0.134 | 2.760 | 3.329 | 0.240 |
+| classification | drift | window_3 | 3 | 18 | 0.150 | replan_last | 6.832 | 0.615 | 0.166 | 0.148 | 2.974 | 3.821 | 0.270 |
+| classification | drift | window_3 | 3 | 18 | 0.150 | replan_mean | 6.775 | 0.598 | 0.158 | 0.130 | 2.875 | 3.381 | 0.241 |
+| classification | drift | window_3 | 3 | 18 | 0.150 | replan_trend | 6.985 | 0.661 | 0.148 | 0.141 | 4.503 | 6.085 | 0.370 |
+| classification | drift | window_3 | 3 | 18 | 0.150 | uniform | 6.770 | 0.606 | 0.148 | 0.119 | -- | -- | -- |
+| classification | drift | window_5 | 5 | 16 | 0.250 | replan_blend | 7.596 | 0.613 | 0.191 | 0.189 | 3.273 | 4.253 | 0.287 |
+| classification | drift | window_5 | 5 | 16 | 0.250 | replan_ewma | 7.528 | 0.649 | 0.182 | 0.192 | 2.760 | 3.329 | 0.240 |
+| classification | drift | window_5 | 5 | 16 | 0.250 | replan_last | 7.742 | 0.655 | 0.176 | 0.185 | 2.974 | 3.821 | 0.270 |
+| classification | drift | window_5 | 5 | 16 | 0.250 | replan_mean | 7.491 | 0.621 | 0.186 | 0.190 | 2.875 | 3.381 | 0.241 |
+| classification | drift | window_5 | 5 | 16 | 0.250 | replan_trend | 8.127 | 0.559 | 0.114 | 0.168 | 4.503 | 6.085 | 0.370 |
+| classification | drift | window_5 | 5 | 16 | 0.250 | uniform | 7.676 | 0.618 | 0.144 | 0.167 | -- | -- | -- |
+| classification | drift | window_7 | 7 | 14 | 0.350 | replan_blend | 8.046 | 0.597 | 0.169 | 0.231 | 3.273 | 4.253 | 0.287 |
+| classification | drift | window_7 | 7 | 14 | 0.350 | replan_ewma | 7.904 | 0.662 | 0.201 | 0.246 | 2.760 | 3.329 | 0.240 |
+| classification | drift | window_7 | 7 | 14 | 0.350 | replan_last | 8.160 | 0.690 | 0.153 | 0.200 | 2.974 | 3.821 | 0.270 |
+| classification | drift | window_7 | 7 | 14 | 0.350 | replan_mean | 7.891 | 0.643 | 0.186 | 0.233 | 2.875 | 3.381 | 0.241 |
+| classification | drift | window_7 | 7 | 14 | 0.350 | replan_trend | 8.664 | 0.574 | 0.104 | 0.179 | 4.503 | 6.085 | 0.370 |
+| classification | drift | window_7 | 7 | 14 | 0.350 | uniform | 8.319 | 0.558 | 0.134 | 0.194 | -- | -- | -- |
+| classification | drift | window_9 | 9 | 12 | 0.450 | replan_blend | 8.425 | 0.605 | 0.209 | 0.313 | 3.273 | 4.253 | 0.287 |
+| classification | drift | window_9 | 9 | 12 | 0.450 | replan_ewma | 8.312 | 0.657 | 0.211 | 0.300 | 2.760 | 3.329 | 0.240 |
+| classification | drift | window_9 | 9 | 12 | 0.450 | replan_last | 8.521 | 0.636 | 0.187 | 0.311 | 2.974 | 3.821 | 0.270 |
+| classification | drift | window_9 | 9 | 12 | 0.450 | replan_mean | 8.300 | 0.639 | 0.212 | 0.294 | 2.875 | 3.381 | 0.241 |
+| classification | drift | window_9 | 9 | 12 | 0.450 | replan_trend | 8.856 | 0.390 | 0.148 | 0.284 | 4.503 | 6.085 | 0.370 |
+| classification | drift | window_9 | 9 | 12 | 0.450 | uniform | 8.573 | 0.529 | 0.137 | 0.233 | -- | -- | -- |
+| classification | nodrift | all_ones | 20 | 1 | 1.000 | replan_blend | 6.884 | 0.572 | 0.170 | 0.378 | 1.308 | 1.717 | 0.223 |
+| classification | nodrift | all_ones | 20 | 1 | 1.000 | replan_ewma | 6.832 | 0.580 | 0.300 | 0.461 | 1.021 | 1.266 | 0.173 |
+| classification | nodrift | all_ones | 20 | 1 | 1.000 | replan_last | 2.200 | 0.605 | 0.220 | 0.416 | 1.169 | 1.543 | 0.198 |
+| classification | nodrift | all_ones | 20 | 1 | 1.000 | replan_mean | 7.070 | 0.574 | 0.300 | 0.461 | 1.005 | 1.237 | 0.170 |
+| classification | nodrift | all_ones | 20 | 1 | 1.000 | replan_trend | 8.700 | 0.441 | 0.020 | 0.141 | 1.750 | 2.378 | 0.314 |
+| classification | nodrift | all_ones | 20 | 1 | 1.000 | uniform | 1.839 | 0.368 | 0.180 | 0.386 | -- | -- | -- |
+| classification | nodrift | window_1 | 1 | 20 | 0.050 | replan_blend | 0.871 | 0.073 | 0.155 | 0.077 | -- | -- | -- |
+| classification | nodrift | window_1 | 1 | 20 | 0.050 | replan_ewma | 0.871 | 0.073 | 0.155 | 0.077 | -- | -- | -- |
+| classification | nodrift | window_1 | 1 | 20 | 0.050 | replan_last | 0.871 | 0.073 | 0.155 | 0.077 | -- | -- | -- |
+| classification | nodrift | window_1 | 1 | 20 | 0.050 | replan_mean | 0.871 | 0.073 | 0.155 | 0.077 | -- | -- | -- |
+| classification | nodrift | window_1 | 1 | 20 | 0.050 | replan_trend | 0.871 | 0.073 | 0.155 | 0.077 | -- | -- | -- |
+| classification | nodrift | window_1 | 1 | 20 | 0.050 | uniform | 0.871 | 0.073 | 0.155 | 0.077 | -- | -- | -- |
+| classification | nodrift | window_3 | 3 | 18 | 0.150 | replan_blend | 1.218 | 0.223 | 0.164 | 0.143 | 1.308 | 1.717 | 0.223 |
+| classification | nodrift | window_3 | 3 | 18 | 0.150 | replan_ewma | 1.061 | 0.086 | 0.169 | 0.148 | 1.021 | 1.266 | 0.173 |
+| classification | nodrift | window_3 | 3 | 18 | 0.150 | replan_last | 1.065 | 0.070 | 0.164 | 0.142 | 1.169 | 1.543 | 0.198 |
+| classification | nodrift | window_3 | 3 | 18 | 0.150 | replan_mean | 1.055 | 0.063 | 0.169 | 0.146 | 1.005 | 1.237 | 0.170 |
+| classification | nodrift | window_3 | 3 | 18 | 0.150 | replan_trend | 1.387 | 0.453 | 0.160 | 0.145 | 1.750 | 2.378 | 0.314 |
+| classification | nodrift | window_3 | 3 | 18 | 0.150 | uniform | 1.051 | 0.052 | 0.174 | 0.142 | -- | -- | -- |
+| classification | nodrift | window_5 | 5 | 16 | 0.250 | replan_blend | 1.866 | 0.585 | 0.159 | 0.183 | 1.308 | 1.717 | 0.223 |
+| classification | nodrift | window_5 | 5 | 16 | 0.250 | replan_ewma | 1.586 | 0.373 | 0.175 | 0.197 | 1.021 | 1.266 | 0.173 |
+| classification | nodrift | window_5 | 5 | 16 | 0.250 | replan_last | 1.163 | 0.110 | 0.157 | 0.191 | 1.169 | 1.543 | 0.198 |
+| classification | nodrift | window_5 | 5 | 16 | 0.250 | replan_mean | 1.603 | 0.358 | 0.171 | 0.188 | 1.005 | 1.237 | 0.170 |
+| classification | nodrift | window_5 | 5 | 16 | 0.250 | replan_trend | 2.694 | 1.069 | 0.107 | 0.155 | 1.750 | 2.378 | 0.314 |
+| classification | nodrift | window_5 | 5 | 16 | 0.250 | uniform | 1.164 | 0.109 | 0.160 | 0.191 | -- | -- | -- |
+| classification | nodrift | window_7 | 7 | 14 | 0.350 | replan_blend | 3.233 | 0.781 | 0.156 | 0.245 | 1.308 | 1.717 | 0.223 |
+| classification | nodrift | window_7 | 7 | 14 | 0.350 | replan_ewma | 2.661 | 0.655 | 0.198 | 0.261 | 1.021 | 1.266 | 0.173 |
+| classification | nodrift | window_7 | 7 | 14 | 0.350 | replan_last | 1.842 | 0.391 | 0.143 | 0.226 | 1.169 | 1.543 | 0.198 |
+| classification | nodrift | window_7 | 7 | 14 | 0.350 | replan_mean | 2.701 | 0.764 | 0.204 | 0.252 | 1.005 | 1.237 | 0.170 |
+| classification | nodrift | window_7 | 7 | 14 | 0.350 | replan_trend | 4.199 | 1.224 | 0.090 | 0.189 | 1.750 | 2.378 | 0.314 |
+| classification | nodrift | window_7 | 7 | 14 | 0.350 | uniform | 1.294 | 0.179 | 0.154 | 0.235 | -- | -- | -- |
+| classification | nodrift | window_9 | 9 | 12 | 0.450 | replan_blend | 5.084 | 0.809 | 0.198 | 0.296 | 1.308 | 1.717 | 0.223 |
+| classification | nodrift | window_9 | 9 | 12 | 0.450 | replan_ewma | 4.939 | 0.986 | 0.208 | 0.286 | 1.021 | 1.266 | 0.173 |
+| classification | nodrift | window_9 | 9 | 12 | 0.450 | replan_last | 4.138 | 2.159 | 0.114 | 0.251 | 1.169 | 1.543 | 0.198 |
+| classification | nodrift | window_9 | 9 | 12 | 0.450 | replan_mean | 5.015 | 1.093 | 0.244 | 0.314 | 1.005 | 1.237 | 0.170 |
+| classification | nodrift | window_9 | 9 | 12 | 0.450 | replan_trend | 6.299 | 0.843 | 0.084 | 0.222 | 1.750 | 2.378 | 0.314 |
+| classification | nodrift | window_9 | 9 | 12 | 0.450 | uniform | 1.393 | 0.225 | 0.164 | 0.280 | -- | -- | -- |
+| regression | drift | all_ones | 20 | 1 | 1.000 | replan_blend | 612.106 | 33.181 | 0.070 | 0.256 | 36.292 | 58.700 | 8.662 |
+| regression | drift | all_ones | 20 | 1 | 1.000 | replan_ewma | 592.704 | 22.211 | 0.060 | 0.239 | 30.994 | 41.083 | 5.718 |
+| regression | drift | all_ones | 20 | 1 | 1.000 | replan_last | 591.845 | 20.505 | 0.060 | 0.239 | 31.491 | 42.844 | 7.006 |
+| regression | drift | all_ones | 20 | 1 | 1.000 | replan_mean | 593.819 | 22.533 | 0.060 | 0.239 | 34.992 | 44.252 | 5.563 |
+| regression | drift | all_ones | 20 | 1 | 1.000 | replan_trend | 641.513 | 46.465 | 0.100 | 0.302 | 65.597 | 118.846 | 14.673 |
+| regression | drift | all_ones | 20 | 1 | 1.000 | uniform | 583.024 | 19.654 | 0.070 | 0.256 | -- | -- | -- |
+| regression | drift | window_1 | 1 | 20 | 0.050 | replan_blend | 191.608 | 3.730 | 0.144 | 0.078 | -- | -- | -- |
+| regression | drift | window_1 | 1 | 20 | 0.050 | replan_ewma | 191.608 | 3.730 | 0.144 | 0.078 | -- | -- | -- |
+| regression | drift | window_1 | 1 | 20 | 0.050 | replan_last | 191.608 | 3.730 | 0.144 | 0.078 | -- | -- | -- |
+| regression | drift | window_1 | 1 | 20 | 0.050 | replan_mean | 191.608 | 3.730 | 0.144 | 0.078 | -- | -- | -- |
+| regression | drift | window_1 | 1 | 20 | 0.050 | replan_trend | 191.608 | 3.730 | 0.144 | 0.078 | -- | -- | -- |
+| regression | drift | window_1 | 1 | 20 | 0.050 | uniform | 191.608 | 3.730 | 0.144 | 0.078 | -- | -- | -- |
+| regression | drift | window_3 | 3 | 18 | 0.150 | replan_blend | 331.196 | 10.485 | 0.131 | 0.141 | 36.292 | 58.700 | 8.662 |
+| regression | drift | window_3 | 3 | 18 | 0.150 | replan_ewma | 329.334 | 10.422 | 0.126 | 0.141 | 30.994 | 41.083 | 5.718 |
+| regression | drift | window_3 | 3 | 18 | 0.150 | replan_last | 332.250 | 10.815 | 0.126 | 0.140 | 31.491 | 42.844 | 7.006 |
+| regression | drift | window_3 | 3 | 18 | 0.150 | replan_mean | 328.909 | 9.622 | 0.126 | 0.141 | 34.992 | 44.252 | 5.563 |
+| regression | drift | window_3 | 3 | 18 | 0.150 | replan_trend | 337.651 | 12.370 | 0.130 | 0.149 | 65.597 | 118.846 | 14.673 |
+| regression | drift | window_3 | 3 | 18 | 0.150 | uniform | 322.117 | 8.923 | 0.138 | 0.142 | -- | -- | -- |
+| regression | drift | window_5 | 5 | 16 | 0.250 | replan_blend | 422.203 | 14.428 | 0.115 | 0.185 | 36.292 | 58.700 | 8.662 |
+| regression | drift | window_5 | 5 | 16 | 0.250 | replan_ewma | 420.400 | 13.554 | 0.114 | 0.189 | 30.994 | 41.083 | 5.718 |
+| regression | drift | window_5 | 5 | 16 | 0.250 | replan_last | 422.022 | 13.565 | 0.123 | 0.189 | 31.491 | 42.844 | 7.006 |
+| regression | drift | window_5 | 5 | 16 | 0.250 | replan_mean | 420.216 | 12.505 | 0.121 | 0.194 | 34.992 | 44.252 | 5.563 |
+| regression | drift | window_5 | 5 | 16 | 0.250 | replan_trend | 436.351 | 18.272 | 0.126 | 0.191 | 65.597 | 118.846 | 14.673 |
+| regression | drift | window_5 | 5 | 16 | 0.250 | uniform | 424.728 | 12.549 | 0.122 | 0.198 | -- | -- | -- |
+| regression | drift | window_7 | 7 | 14 | 0.350 | replan_blend | 474.789 | 15.723 | 0.100 | 0.209 | 36.292 | 58.700 | 8.662 |
+| regression | drift | window_7 | 7 | 14 | 0.350 | replan_ewma | 470.545 | 15.364 | 0.096 | 0.214 | 30.994 | 41.083 | 5.718 |
+| regression | drift | window_7 | 7 | 14 | 0.350 | replan_last | 473.140 | 14.102 | 0.108 | 0.210 | 31.491 | 42.844 | 7.006 |
+| regression | drift | window_7 | 7 | 14 | 0.350 | replan_mean | 468.990 | 14.487 | 0.101 | 0.215 | 34.992 | 44.252 | 5.563 |
+| regression | drift | window_7 | 7 | 14 | 0.350 | replan_trend | 493.181 | 25.052 | 0.101 | 0.215 | 65.597 | 118.846 | 14.673 |
+| regression | drift | window_7 | 7 | 14 | 0.350 | uniform | 464.136 | 13.694 | 0.110 | 0.228 | -- | -- | -- |
+| regression | drift | window_9 | 9 | 12 | 0.450 | replan_blend | 508.508 | 19.019 | 0.093 | 0.221 | 36.292 | 58.700 | 8.662 |
+| regression | drift | window_9 | 9 | 12 | 0.450 | replan_ewma | 504.787 | 16.611 | 0.081 | 0.209 | 30.994 | 41.083 | 5.718 |
+| regression | drift | window_9 | 9 | 12 | 0.450 | replan_last | 506.193 | 16.941 | 0.085 | 0.207 | 31.491 | 42.844 | 7.006 |
+| regression | drift | window_9 | 9 | 12 | 0.450 | replan_mean | 504.612 | 16.479 | 0.082 | 0.212 | 34.992 | 44.252 | 5.563 |
+| regression | drift | window_9 | 9 | 12 | 0.450 | replan_trend | 529.634 | 28.633 | 0.085 | 0.201 | 65.597 | 118.846 | 14.673 |
+| regression | drift | window_9 | 9 | 12 | 0.450 | uniform | 512.422 | 14.613 | 0.074 | 0.206 | -- | -- | -- |
+| regression | nodrift | all_ones | 20 | 1 | 1.000 | replan_blend | 547.918 | 47.676 | 0.180 | 0.386 | 27.460 | 49.438 | 7.926 |
+| regression | nodrift | all_ones | 20 | 1 | 1.000 | replan_ewma | 513.256 | 27.140 | 0.150 | 0.359 | 15.821 | 25.348 | 5.408 |
+| regression | nodrift | all_ones | 20 | 1 | 1.000 | replan_last | 508.339 | 23.541 | 0.170 | 0.378 | 19.509 | 31.232 | 6.479 |
+| regression | nodrift | all_ones | 20 | 1 | 1.000 | replan_mean | 515.388 | 30.643 | 0.170 | 0.378 | 15.478 | 24.796 | 5.295 |
+| regression | nodrift | all_ones | 20 | 1 | 1.000 | replan_trend | 612.373 | 67.394 | 0.140 | 0.349 | 51.459 | 95.812 | 12.818 |
+| regression | nodrift | all_ones | 20 | 1 | 1.000 | uniform | 491.462 | 21.485 | 0.180 | 0.386 | -- | -- | -- |
+| regression | nodrift | window_1 | 1 | 20 | 0.050 | replan_blend | 135.061 | 2.495 | 0.166 | 0.082 | -- | -- | -- |
+| regression | nodrift | window_1 | 1 | 20 | 0.050 | replan_ewma | 135.061 | 2.495 | 0.166 | 0.082 | -- | -- | -- |
+| regression | nodrift | window_1 | 1 | 20 | 0.050 | replan_last | 135.061 | 2.495 | 0.166 | 0.082 | -- | -- | -- |
+| regression | nodrift | window_1 | 1 | 20 | 0.050 | replan_mean | 135.061 | 2.495 | 0.166 | 0.082 | -- | -- | -- |
+| regression | nodrift | window_1 | 1 | 20 | 0.050 | replan_trend | 135.061 | 2.495 | 0.166 | 0.082 | -- | -- | -- |
+| regression | nodrift | window_1 | 1 | 20 | 0.050 | uniform | 135.061 | 2.495 | 0.166 | 0.082 | -- | -- | -- |
+| regression | nodrift | window_3 | 3 | 18 | 0.150 | replan_blend | 241.539 | 7.237 | 0.146 | 0.140 | 27.460 | 49.438 | 7.926 |
+| regression | nodrift | window_3 | 3 | 18 | 0.150 | replan_ewma | 239.812 | 7.077 | 0.149 | 0.138 | 15.821 | 25.348 | 5.408 |
+| regression | nodrift | window_3 | 3 | 18 | 0.150 | replan_last | 241.690 | 7.528 | 0.147 | 0.137 | 19.509 | 31.232 | 6.479 |
+| regression | nodrift | window_3 | 3 | 18 | 0.150 | replan_mean | 239.660 | 6.739 | 0.148 | 0.137 | 15.478 | 24.796 | 5.295 |
+| regression | nodrift | window_3 | 3 | 18 | 0.150 | replan_trend | 248.065 | 10.707 | 0.141 | 0.143 | 51.459 | 95.812 | 12.818 |
+| regression | nodrift | window_3 | 3 | 18 | 0.150 | uniform | 234.516 | 6.261 | 0.151 | 0.140 | -- | -- | -- |
+| regression | nodrift | window_5 | 5 | 16 | 0.250 | replan_blend | 313.965 | 13.266 | 0.122 | 0.174 | 27.460 | 49.438 | 7.926 |
+| regression | nodrift | window_5 | 5 | 16 | 0.250 | replan_ewma | 309.590 | 9.365 | 0.117 | 0.162 | 15.821 | 25.348 | 5.408 |
+| regression | nodrift | window_5 | 5 | 16 | 0.250 | replan_last | 315.792 | 13.340 | 0.129 | 0.169 | 19.509 | 31.232 | 6.479 |
+| regression | nodrift | window_5 | 5 | 16 | 0.250 | replan_mean | 308.668 | 10.050 | 0.120 | 0.167 | 15.478 | 24.796 | 5.295 |
+| regression | nodrift | window_5 | 5 | 16 | 0.250 | replan_trend | 335.150 | 22.921 | 0.128 | 0.162 | 51.459 | 95.812 | 12.818 |
+| regression | nodrift | window_5 | 5 | 16 | 0.250 | uniform | 312.612 | 9.356 | 0.112 | 0.163 | -- | -- | -- |
+| regression | nodrift | window_7 | 7 | 14 | 0.350 | replan_blend | 362.649 | 16.080 | 0.133 | 0.217 | 27.460 | 49.438 | 7.926 |
+| regression | nodrift | window_7 | 7 | 14 | 0.350 | replan_ewma | 357.381 | 15.096 | 0.131 | 0.211 | 15.821 | 25.348 | 5.408 |
+| regression | nodrift | window_7 | 7 | 14 | 0.350 | replan_last | 362.490 | 14.845 | 0.136 | 0.210 | 19.509 | 31.232 | 6.479 |
+| regression | nodrift | window_7 | 7 | 14 | 0.350 | replan_mean | 356.210 | 14.444 | 0.136 | 0.211 | 15.478 | 24.796 | 5.295 |
+| regression | nodrift | window_7 | 7 | 14 | 0.350 | replan_trend | 393.644 | 31.616 | 0.132 | 0.212 | 51.459 | 95.812 | 12.818 |
+| regression | nodrift | window_7 | 7 | 14 | 0.350 | uniform | 344.732 | 10.151 | 0.132 | 0.213 | -- | -- | -- |
+| regression | nodrift | window_9 | 9 | 12 | 0.450 | replan_blend | 401.021 | 21.535 | 0.130 | 0.236 | 27.460 | 49.438 | 7.926 |
+| regression | nodrift | window_9 | 9 | 12 | 0.450 | replan_ewma | 394.373 | 18.308 | 0.124 | 0.234 | 15.821 | 25.348 | 5.408 |
+| regression | nodrift | window_9 | 9 | 12 | 0.450 | replan_last | 394.812 | 18.843 | 0.121 | 0.225 | 19.509 | 31.232 | 6.479 |
+| regression | nodrift | window_9 | 9 | 12 | 0.450 | replan_mean | 393.953 | 18.900 | 0.109 | 0.217 | 15.478 | 24.796 | 5.295 |
+| regression | nodrift | window_9 | 9 | 12 | 0.450 | replan_trend | 439.349 | 38.420 | 0.118 | 0.220 | 51.459 | 95.812 | 12.818 |
+| regression | nodrift | window_9 | 9 | 12 | 0.450 | uniform | 396.465 | 14.757 | 0.130 | 0.239 | -- | -- | -- |
+
+## Protocol Full Result Table
+
+| Task | Condition | Mask | Support | # masks | Density | Method | S mean | S std | W mean | W std | Forecast MAE | Forecast RMSE | Deriv MAE |
+|---|---|---|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|
+| regression | drift | maintenance_every5 | 4 | 1 | 0.200 | replan_blend | 229.831 | 7.453 | 0.100 | 0.302 | 36.292 | 58.700 | 8.662 |
+| regression | drift | maintenance_every5 | 4 | 1 | 0.200 | replan_ewma | 227.666 | 6.481 | 0.100 | 0.302 | 30.994 | 41.083 | 5.718 |
+| regression | drift | maintenance_every5 | 4 | 1 | 0.200 | replan_last | 228.087 | 6.940 | 0.090 | 0.288 | 31.491 | 42.844 | 7.006 |
+| regression | drift | maintenance_every5 | 4 | 1 | 0.200 | replan_mean | 227.850 | 6.470 | 0.090 | 0.288 | 34.992 | 44.252 | 5.563 |
+| regression | drift | maintenance_every5 | 4 | 1 | 0.200 | replan_trend | 239.088 | 12.561 | 0.100 | 0.302 | 65.597 | 118.846 | 14.673 |
+| regression | drift | maintenance_every5 | 4 | 1 | 0.200 | uniform | 696.655 | 6.361 | 0.090 | 0.288 | -- | -- | -- |
+| regression | drift | rolling_audit_4 | 4 | 17 | 0.200 | replan_blend | 376.442 | 13.766 | 0.131 | 0.174 | 36.292 | 58.700 | 8.662 |
+| regression | drift | rolling_audit_4 | 4 | 17 | 0.200 | replan_ewma | 372.485 | 13.966 | 0.122 | 0.167 | 30.994 | 41.083 | 5.718 |
+| regression | drift | rolling_audit_4 | 4 | 17 | 0.200 | replan_last | 376.027 | 13.025 | 0.127 | 0.170 | 31.491 | 42.844 | 7.006 |
+| regression | drift | rolling_audit_4 | 4 | 17 | 0.200 | replan_mean | 370.987 | 13.736 | 0.122 | 0.167 | 34.992 | 44.252 | 5.563 |
+| regression | drift | rolling_audit_4 | 4 | 17 | 0.200 | replan_trend | 388.371 | 17.135 | 0.121 | 0.159 | 65.597 | 118.846 | 14.673 |
+| regression | drift | rolling_audit_4 | 4 | 17 | 0.200 | uniform | 364.881 | 11.262 | 0.126 | 0.175 | -- | -- | -- |
+| regression | drift | scheduled_high_risk_last5 | 5 | 1 | 0.250 | replan_blend | 248.540 | 8.315 | 0.110 | 0.314 | 36.292 | 58.700 | 8.662 |
+| regression | drift | scheduled_high_risk_last5 | 5 | 1 | 0.250 | replan_ewma | 248.858 | 8.046 | 0.110 | 0.314 | 30.994 | 41.083 | 5.718 |
+| regression | drift | scheduled_high_risk_last5 | 5 | 1 | 0.250 | replan_last | 249.735 | 7.385 | 0.110 | 0.314 | 31.491 | 42.844 | 7.006 |
+| regression | drift | scheduled_high_risk_last5 | 5 | 1 | 0.250 | replan_mean | 248.656 | 8.264 | 0.100 | 0.302 | 34.992 | 44.252 | 5.563 |
+| regression | drift | scheduled_high_risk_last5 | 5 | 1 | 0.250 | replan_trend | 251.424 | 7.727 | 0.100 | 0.302 | 65.597 | 118.846 | 14.673 |
+| regression | drift | scheduled_high_risk_last5 | 5 | 1 | 0.250 | uniform | 696.394 | 7.339 | 0.110 | 0.314 | -- | -- | -- |
+| regression | drift | shift_blocks_5x4 | 4 | 5 | 0.200 | replan_blend | 370.479 | 12.666 | 0.126 | 0.157 | 36.292 | 58.700 | 8.662 |
+| regression | drift | shift_blocks_5x4 | 4 | 5 | 0.200 | replan_ewma | 371.120 | 13.941 | 0.118 | 0.153 | 30.994 | 41.083 | 5.718 |
+| regression | drift | shift_blocks_5x4 | 4 | 5 | 0.200 | replan_last | 370.909 | 13.509 | 0.122 | 0.161 | 31.491 | 42.844 | 7.006 |
+| regression | drift | shift_blocks_5x4 | 4 | 5 | 0.200 | replan_mean | 371.096 | 13.370 | 0.122 | 0.150 | 34.992 | 44.252 | 5.563 |
+| regression | drift | shift_blocks_5x4 | 4 | 5 | 0.200 | replan_trend | 387.867 | 15.960 | 0.132 | 0.148 | 65.597 | 118.846 | 14.673 |
+| regression | drift | shift_blocks_5x4 | 4 | 5 | 0.200 | uniform | 364.881 | 11.262 | 0.120 | 0.156 | -- | -- | -- |
+| regression | nodrift | maintenance_every5 | 4 | 1 | 0.200 | replan_blend | 164.736 | 6.369 | 0.110 | 0.314 | 27.460 | 49.438 | 7.926 |
+| regression | nodrift | maintenance_every5 | 4 | 1 | 0.200 | replan_ewma | 162.619 | 4.795 | 0.140 | 0.349 | 15.821 | 25.348 | 5.408 |
+| regression | nodrift | maintenance_every5 | 4 | 1 | 0.200 | replan_last | 162.548 | 5.233 | 0.100 | 0.302 | 19.509 | 31.232 | 6.479 |
+| regression | nodrift | maintenance_every5 | 4 | 1 | 0.200 | replan_mean | 162.712 | 4.768 | 0.130 | 0.338 | 15.478 | 24.796 | 5.295 |
+| regression | nodrift | maintenance_every5 | 4 | 1 | 0.200 | replan_trend | 186.313 | 23.955 | 0.090 | 0.288 | 51.459 | 95.812 | 12.818 |
+| regression | nodrift | maintenance_every5 | 4 | 1 | 0.200 | uniform | 673.890 | 3.910 | 0.130 | 0.338 | -- | -- | -- |
+| regression | nodrift | rolling_audit_4 | 4 | 17 | 0.200 | replan_blend | 276.299 | 11.144 | 0.142 | 0.150 | 27.460 | 49.438 | 7.926 |
+| regression | nodrift | rolling_audit_4 | 4 | 17 | 0.200 | replan_ewma | 272.892 | 9.076 | 0.135 | 0.156 | 15.821 | 25.348 | 5.408 |
+| regression | nodrift | rolling_audit_4 | 4 | 17 | 0.200 | replan_last | 278.028 | 12.008 | 0.143 | 0.158 | 19.509 | 31.232 | 6.479 |
+| regression | nodrift | rolling_audit_4 | 4 | 17 | 0.200 | replan_mean | 271.605 | 9.213 | 0.143 | 0.159 | 15.478 | 24.796 | 5.295 |
+| regression | nodrift | rolling_audit_4 | 4 | 17 | 0.200 | replan_trend | 290.613 | 18.648 | 0.135 | 0.149 | 51.459 | 95.812 | 12.818 |
+| regression | nodrift | rolling_audit_4 | 4 | 17 | 0.200 | uniform | 266.853 | 7.592 | 0.141 | 0.151 | -- | -- | -- |
+| regression | nodrift | scheduled_high_risk_last5 | 5 | 1 | 0.250 | replan_blend | 177.524 | 6.235 | 0.140 | 0.349 | 27.460 | 49.438 | 7.926 |
+| regression | nodrift | scheduled_high_risk_last5 | 5 | 1 | 0.250 | replan_ewma | 177.658 | 6.282 | 0.140 | 0.349 | 15.821 | 25.348 | 5.408 |
+| regression | nodrift | scheduled_high_risk_last5 | 5 | 1 | 0.250 | replan_last | 178.769 | 5.814 | 0.150 | 0.359 | 19.509 | 31.232 | 6.479 |
+| regression | nodrift | scheduled_high_risk_last5 | 5 | 1 | 0.250 | replan_mean | 177.312 | 6.450 | 0.140 | 0.349 | 15.478 | 24.796 | 5.295 |
+| regression | nodrift | scheduled_high_risk_last5 | 5 | 1 | 0.250 | replan_trend | 181.733 | 7.647 | 0.140 | 0.349 | 51.459 | 95.812 | 12.818 |
+| regression | nodrift | scheduled_high_risk_last5 | 5 | 1 | 0.250 | uniform | 659.690 | 5.181 | 0.120 | 0.327 | -- | -- | -- |
+| regression | nodrift | shift_blocks_5x4 | 4 | 5 | 0.200 | replan_blend | 272.024 | 9.311 | 0.136 | 0.147 | 27.460 | 49.438 | 7.926 |
+| regression | nodrift | shift_blocks_5x4 | 4 | 5 | 0.200 | replan_ewma | 271.705 | 9.316 | 0.146 | 0.142 | 15.821 | 25.348 | 5.408 |
+| regression | nodrift | shift_blocks_5x4 | 4 | 5 | 0.200 | replan_last | 273.048 | 10.138 | 0.134 | 0.145 | 19.509 | 31.232 | 6.479 |
+| regression | nodrift | shift_blocks_5x4 | 4 | 5 | 0.200 | replan_mean | 271.064 | 8.560 | 0.150 | 0.154 | 15.478 | 24.796 | 5.295 |
+| regression | nodrift | shift_blocks_5x4 | 4 | 5 | 0.200 | replan_trend | 295.524 | 21.872 | 0.132 | 0.143 | 51.459 | 95.812 | 12.818 |
+| regression | nodrift | shift_blocks_5x4 | 4 | 5 | 0.200 | uniform | 266.853 | 7.592 | 0.138 | 0.144 | -- | -- | -- |
+
+## Rebuttal Use
+
+- Use the core frontier to answer the novelty/alpha-spending concern: all-ones recovers the classical endpoint, while nontrivial masks impose simultaneous mask-family constraints.
+- Use the protocol masks to answer the hyperparameter concern: the mask family is an ex ante audit contract, not an outcome-tuned parameter.
+- Do not overclaim replanning. It helps in some settings, but uniform is often competitive; the clean claim is validity under user-chosen monitoring masks, with replanning as a deployable efficiency option.

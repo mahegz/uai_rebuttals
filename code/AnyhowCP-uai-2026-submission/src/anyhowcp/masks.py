@@ -37,6 +37,45 @@ def sliding_window_masks(T: int, K: int) -> np.ndarray:
     return masks
 
 
+def block_partition_masks(T: int, num_blocks: int) -> np.ndarray:
+    assert T >= 1
+    assert 1 <= num_blocks <= T
+    blocks = np.array_split(np.arange(T), num_blocks)
+    masks = np.zeros((len(blocks), T), dtype=np.float64)
+    for row, idx in enumerate(blocks):
+        masks[row, idx] = 1.0
+    return masks
+
+
+def suffix_mask(T: int, length: int) -> np.ndarray:
+    assert 1 <= length <= T
+    mask = np.zeros((1, T), dtype=np.float64)
+    mask[0, T - length :] = 1.0
+    return mask
+
+
+def cadence_mask(T: int, every: int) -> np.ndarray:
+    assert 1 <= every <= T
+    mask = np.zeros((1, T), dtype=np.float64)
+    mask[0, every - 1 :: every] = 1.0
+    return mask
+
+
+def named_mask_family(T: int, spec: dict) -> np.ndarray:
+    kind = spec["kind"]
+    if kind == "all_ones":
+        return all_ones_masks(T)
+    if kind == "sliding_window":
+        return sliding_window_masks(T, int(spec["K"]))
+    if kind == "block_partition":
+        return block_partition_masks(T, int(spec["num_blocks"]))
+    if kind == "suffix":
+        return suffix_mask(T, int(spec["length"]))
+    if kind == "cadence":
+        return cadence_mask(T, int(spec["every"]))
+    raise ValueError(f"unknown mask family kind {kind!r}")
+
+
 def union_mask(masks: np.ndarray) -> np.ndarray:
     M = as_mask_matrix(masks)
     return (M.sum(axis=0) > 0.0).astype(np.float64)
