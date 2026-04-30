@@ -308,7 +308,6 @@ def run_paper_experiments(cfg: dict) -> dict:
     tasks = list(cfg.get("tasks", ["regression", "classification"]))
     conditions = list(cfg.get("conditions", ["nodrift", "drift"]))
     forecasters = list(cfg.get("forecasters", ["ewma", "trend", "blend"]))
-    include_oracle = bool(cfg.get("include_oracle", False))
     smoothing = dict(cfg.get("smoothing", {}))
     forecast_cfg = dict(cfg.get("forecast", {}))
     base_seed = int(cfg.get("seed", 0))
@@ -324,7 +323,6 @@ def run_paper_experiments(cfg: dict) -> dict:
             "notes": [
                 "W is the mean fraction of failed monitored masks across runs.",
                 "S is interval width for regression and set cardinality for classification.",
-                "oracle uses realized future costs and is a diagnostic upper bound, not deployable.",
             ],
         }
         with open(out_dir / "summary.json", "w") as f:
@@ -370,8 +368,6 @@ def run_paper_experiments(cfg: dict) -> dict:
                 method_metrics: dict[str, list[dict]] = {"uniform": []}
                 for kind in forecasters:
                     method_metrics[f"replan_{kind}"] = []
-                if include_oracle:
-                    method_metrics["oracle"] = []
 
                 for run, (costs, records, eval_fn) in enumerate(run_cache):
                     uniform_s = uniform_log_schedule(alpha, masks, s_max=s_grid[-1])
@@ -418,10 +414,7 @@ def run_paper_experiments(cfg: dict) -> dict:
                             )
                         continue
 
-                    kinds = [*forecasters]
-                    if include_oracle:
-                        kinds.append("oracle")
-                    for kind in kinds:
+                    for kind in forecasters:
                         forecasts = build_replanning_forecasts(
                             costs,
                             kind=kind,
@@ -432,7 +425,7 @@ def run_paper_experiments(cfg: dict) -> dict:
                         s = np.array([step.s_t for step in steps], dtype=np.float64)
                         metric = eval_fn(records, s, masks, alpha)
                         metric["forecast_error"] = forecast_error_summary(costs, forecasts)
-                        name = "oracle" if kind == "oracle" else f"replan_{kind}"
+                        name = f"replan_{kind}"
                         method_metrics[name].append(metric)
                         per_run.append(
                             {
@@ -490,7 +483,6 @@ def run_paper_experiments(cfg: dict) -> dict:
         "notes": [
             "W is the mean fraction of failed monitored masks across runs.",
             "S is interval width for regression and set cardinality for classification.",
-            "oracle uses realized future costs and is a diagnostic upper bound, not deployable.",
         ],
     }
     return summary

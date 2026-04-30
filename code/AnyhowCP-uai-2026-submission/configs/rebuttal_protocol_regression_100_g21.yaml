@@ -22,7 +22,6 @@ mask_families:
     kind: cadence
     every: 5
 forecasters: [last, mean, ewma, trend, blend]
-include_oracle: false
 smoothing:
   kind: gaussian_cdf_spline
   bandwidth: null

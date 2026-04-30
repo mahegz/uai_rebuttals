@@ -37,11 +37,9 @@ def row_lookup(rows: list[dict]) -> dict[tuple[str, str, str, str], dict]:
     }
 
 
-def best_deployable(rows: list[dict]) -> list[dict]:
+def best_method(rows: list[dict]) -> list[dict]:
     grouped: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
     for r in rows:
-        if r["method"] == "oracle":
-            continue
         grouped[(r["task"], r["condition"], mask_label(r))].append(r)
     out = []
     for key in sorted(grouped):
@@ -90,7 +88,7 @@ def emit_report(summary_path: Path, out_path: Path) -> None:
     lines.extend([
         "# UAI Rebuttal Experiment Report",
         "",
-        "This report summarizes the rerun in the cleaned rebuttal codebase. The run uses the paper's core axes: California Housing regression and CIFAR-10 classification; no-drift and drift settings; `T=20`; and mask-valid spending schedules. It also extends the paper-facing sweep with multiple deployable forecasters and an offline oracle diagnostic.",
+        "This report summarizes the rerun in the cleaned rebuttal codebase. The run uses the paper's core axes: California Housing regression and CIFAR-10 classification; no-drift and drift settings; `T=20`; mask-valid spending schedules; and multiple deployable forecasters.",
         "",
         "## Run Configuration",
         "",
@@ -104,16 +102,15 @@ def emit_report(summary_path: Path, out_path: Path) -> None:
         f"- Window sizes: `{cfg.get('window_sizes')}`",
         f"- Mask families: `{', '.join(masks)}`",
         f"- Forecasters: `{', '.join(cfg.get('forecasters', []))}`",
-        f"- Oracle diagnostic included: `{cfg.get('include_oracle')}`",
         "",
         f"Metrics: `W` is the mean fraction of monitored masks containing at least one miscoverage. `S` is interval width for regression and set cardinality for classification. Lower `S` is better, while `W` should be interpreted relative to the target `alpha={alpha}` with Monte Carlo variability.",
         "",
-        "## Best Deployable Method By Setting",
+        "## Best Method By Setting",
         "",
         "| Task | Condition | Mask | Support | # masks | Best method | S | W | Best replan | Replan S | Replan W |",
         "|---|---|---|---:|---:|---|---:|---:|---|---:|---:|",
     ])
-    for item in best_deployable(rows):
+    for item in best_method(rows):
         best = item["best"]
         best_rep = item["best_replan"]
         if best_rep is None:
@@ -140,7 +137,7 @@ def emit_report(summary_path: Path, out_path: Path) -> None:
         "",
         "## Forecasting Method Comparison",
         "",
-        "Averaging across drift settings and mask sizes gives a coarse view of each method's efficiency. The oracle row uses realized future costs and is not deployable; it is included only to indicate the price paid for forecasting.",
+        "Averaging across drift settings and mask sizes gives a coarse view of each method's efficiency.",
         "",
         "| Task | Method | Avg S | Avg W |",
         "|---|---|---:|---:|",
@@ -193,7 +190,7 @@ def emit_report(summary_path: Path, out_path: Path) -> None:
 
     above = [
         r for r in rows
-        if r["method"] != "oracle" and finite(r["W_mean"]) and r["W_mean"] > alpha
+        if finite(r["W_mean"]) and r["W_mean"] > alpha
     ]
     if above:
         worst = max(above, key=lambda r: r["W_mean"])
@@ -204,7 +201,7 @@ def emit_report(summary_path: Path, out_path: Path) -> None:
         lines.append(f"- All deployable empirical `W` estimates are at or below `alpha={alpha}` in this sweep.")
 
     for task in sorted({r["task"] for r in rows}):
-        task_rows = [r for r in rows if r["task"] == task and r["method"] != "oracle"]
+        task_rows = [r for r in rows if r["task"] == task]
         best = min(task_rows, key=lambda r: r["S_mean"])
         lines.append(
             f"- Best observed deployable `{task}` efficiency is `{best['method']}` under `{best['condition']}`, `{mask_label(best)}`, with `S={fmt(best['S_mean'])}` and `W={fmt(best['W_mean'])}`."

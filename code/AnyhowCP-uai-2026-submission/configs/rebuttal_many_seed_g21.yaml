@@ -9,7 +9,6 @@ tasks: [regression, classification]
 conditions: [nodrift, drift]
 window_sizes: [1, 3, 5, 7, 9, 20]
 forecasters: [last, mean, ewma, trend, blend]
-include_oracle: false
 smoothing:
   kind: gaussian_cdf_spline
   bandwidth: null

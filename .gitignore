@@ -11,6 +11,8 @@
 !.workspace/experiments/rebuttal_protocol_regression_100_g21/
 !.workspace/experiments/rebuttal_protocol_regression_100_g21/summary.json
 !.workspace/experiments/rebuttal_protocol_regression_100_g21/per_run.jsonl
+!.workspace/experiments/rebuttal_link_ready/
+!.workspace/experiments/rebuttal_link_ready/**
 code/data/
 *.zip
 __pycache__/

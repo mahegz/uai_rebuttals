@@ -163,7 +163,7 @@ def main() -> None:
     alpha = float(core_cfg.get("alpha", 0.15))
 
     all_rows = core_rows + protocol_rows
-    above = [r for r in all_rows if r["method"] != "oracle" and r["W_mean"] > alpha]
+    above = [r for r in all_rows if r["W_mean"] > alpha]
     worst = max(above, key=lambda r: r["W_mean"]) if above else None
     core_replan, core_uniform = replan_win_counts(core_rows)
     protocol_replan, protocol_uniform = replan_win_counts(protocol_rows)

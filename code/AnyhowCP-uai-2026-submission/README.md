@@ -21,7 +21,7 @@ src/anyhowcp/
   masks.py        mask families and validity checks
   conformal.py    p-values, prediction sets, e-values
   costs.py        empirical and smoothed cost grids in log-budget coordinates
-  forecast.py     EWMA, trend, blend, and oracle tail forecasts
+  forecast.py     last, mean, EWMA, trend, and blend tail forecasts
   solvers.py      SciPy/HiGHS LP and MILP solvers plus a continuous SciPy path
   replanning.py   explicit remaining-budget replanning state
   metrics.py      window failure metrics
@@ -55,6 +55,23 @@ problem with:
 The output includes the selected schedules, exact mask failure probabilities,
 and a small simulated window failure rate for independent uniform p-values.
 
+## Synthetic Gaussian Checks
+
+Two synthetic scripts isolate the scheduling logic from the real-data pipeline:
+
+```bash
+conda run -n anyhow_conformal env PYTHONNOUSERSITE=1 \
+  python code/AnyhowCP-uai-2026-submission/scripts/gaussian_exact_check.py
+
+conda run -n anyhow_conformal env PYTHONNOUSERSITE=1 \
+  python code/AnyhowCP-uai-2026-submission/scripts/synthetic_gaussian_empirical_forecast.py
+```
+
+`gaussian_exact_check.py` gives the optimizer exact Gaussian quantiles.
+`synthetic_gaussian_empirical_forecast.py` keeps the same Gaussian data model
+but gives replanning only empirical calibration-score cost curves, then reports
+how forecast losses relate to downstream interval width.
+
 ## Rebuttal Experiment Hook
 
 The approved rebuttal experiments should plug into `configs/rebuttal_template.yaml`.
@@ -87,10 +104,7 @@ conda run -n anyhow_conformal env PYTHONNOUSERSITE=1 \
 The default config runs California Housing and CIFAR-10, drift and no-drift,
 `K in {1, 3, 5, 7, 9}`, and the deployable forecasters `ewma` and `blend`.
 The `trend` forecaster remains in the pilot config as a diagnostic, but the
-main run excludes it because the first pilot made it look too volatile. The
-runner can log an offline `oracle` diagnostic when `include_oracle: true`; do
-not describe oracle numbers as deployable. The main/base configs disable oracle
-to keep the full 100-run reproduction focused on deployable methods.
+main run excludes it because the first pilot made it look too volatile.
 
 For a quick smoke check:
 

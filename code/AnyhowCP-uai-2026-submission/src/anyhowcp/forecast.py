@@ -74,7 +74,6 @@ def build_replanning_forecasts(
     The first row of each tail forecast is always the current realized cost
     curve, which is available from the current calibration batch. Rows beyond
     the current time are predicted from previous/current calibration batches.
-    ``kind='oracle'`` is included only as an offline diagnostic upper bound.
     """
     realized = np.asarray(realized_cost_grid, dtype=np.float64)
     assert realized.ndim == 2
@@ -82,9 +81,6 @@ def build_replanning_forecasts(
     kind = kind.lower()
     forecasts: list[np.ndarray] = []
     for t in range(T):
-        if kind == "oracle":
-            forecasts.append(realized[t:].copy())
-            continue
         rows = [realized[t]]
         history = realized[: t + 1]
         for u in range(t + 1, T):

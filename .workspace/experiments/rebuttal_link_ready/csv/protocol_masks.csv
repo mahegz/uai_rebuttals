@@ -1,0 +1,9 @@
+condition,mask,kind,support,num_masks,density,uniform_S,uniform_W,best_replan,replan_S,replan_W,delta_S_pct_vs_uniform
+drift,maintenance_every5,cadence,4,1,0.200,696.655,0.090,replan_ewma,227.666,0.100,-67.320
+drift,rolling_audit_4,sliding_window,4,17,0.200,364.881,0.126,replan_mean,370.987,0.122,1.673
+drift,scheduled_high_risk_last5,suffix,5,1,0.250,696.394,0.110,replan_blend,248.540,0.110,-64.310
+drift,shift_blocks_5x4,block_partition,4,5,0.200,364.881,0.120,replan_blend,370.479,0.126,1.534
+nodrift,maintenance_every5,cadence,4,1,0.200,673.890,0.130,replan_last,162.548,0.100,-75.879
+nodrift,rolling_audit_4,sliding_window,4,17,0.200,266.853,0.141,replan_mean,271.605,0.143,1.781
+nodrift,scheduled_high_risk_last5,suffix,5,1,0.250,659.690,0.120,replan_mean,177.312,0.140,-73.122
+nodrift,shift_blocks_5x4,block_partition,4,5,0.200,266.853,0.138,replan_mean,271.064,0.150,1.578

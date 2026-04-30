@@ -1,0 +1,26 @@
+| task | condition | mask | support | num_masks | uniform_S | uniform_S_ci95 | uniform_W | uniform_W_ci95 | best_replan | replan_S | replan_S_ci95 | replan_W | replan_W_ci95 | delta_S_pct_vs_uniform |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| classification | drift | window_1 | 1 | 20 | 3.901 | 0.102 | 0.145 | 0.015 | replan_last | 3.901 | 0.102 | 0.145 | 0.015 | 0.000 |
+| classification | drift | window_3 | 3 | 18 | 6.770 | 0.119 | 0.148 | 0.023 | replan_blend | 6.712 | 0.122 | 0.174 | 0.028 | -0.857 |
+| classification | drift | window_5 | 5 | 16 | 7.676 | 0.121 | 0.144 | 0.033 | replan_mean | 7.491 | 0.122 | 0.186 | 0.037 | -2.404 |
+| classification | drift | window_7 | 7 | 14 | 8.319 | 0.109 | 0.134 | 0.038 | replan_mean | 7.891 | 0.126 | 0.186 | 0.046 | -5.145 |
+| classification | drift | window_9 | 9 | 12 | 8.573 | 0.104 | 0.137 | 0.046 | replan_mean | 8.300 | 0.125 | 0.212 | 0.058 | -3.196 |
+| classification | drift | all_ones | 20 | 1 | 9.129 | 0.079 | 0.220 | 0.082 | replan_mean | 8.787 | 0.110 | 0.310 | 0.091 | -3.752 |
+| classification | nodrift | window_1 | 1 | 20 | 0.871 | 0.014 | 0.155 | 0.015 | replan_last | 0.871 | 0.014 | 0.155 | 0.015 | 0.000 |
+| classification | nodrift | window_3 | 3 | 18 | 1.051 | 0.010 | 0.174 | 0.028 | replan_mean | 1.055 | 0.012 | 0.169 | 0.029 | 0.476 |
+| classification | nodrift | window_5 | 5 | 16 | 1.164 | 0.021 | 0.160 | 0.037 | replan_last | 1.163 | 0.022 | 0.157 | 0.037 | -0.086 |
+| classification | nodrift | window_7 | 7 | 14 | 1.294 | 0.035 | 0.154 | 0.046 | replan_last | 1.842 | 0.077 | 0.143 | 0.044 | 42.404 |
+| classification | nodrift | window_9 | 9 | 12 | 1.393 | 0.044 | 0.164 | 0.055 | replan_last | 4.138 | 0.423 | 0.114 | 0.049 | 196.950 |
+| classification | nodrift | all_ones | 20 | 1 | 1.839 | 0.072 | 0.180 | 0.076 | replan_last | 2.200 | 0.119 | 0.220 | 0.082 | 19.690 |
+| regression | drift | window_1 | 1 | 20 | 191.608 | 0.731 | 0.144 | 0.015 | replan_last | 191.608 | 0.731 | 0.144 | 0.015 | 0.000 |
+| regression | drift | window_3 | 3 | 18 | 322.117 | 1.749 | 0.138 | 0.028 | replan_mean | 328.909 | 1.886 | 0.126 | 0.028 | 2.109 |
+| regression | drift | window_5 | 5 | 16 | 424.728 | 2.460 | 0.122 | 0.039 | replan_mean | 420.216 | 2.451 | 0.121 | 0.038 | -1.062 |
+| regression | drift | window_7 | 7 | 14 | 464.136 | 2.684 | 0.110 | 0.045 | replan_mean | 468.990 | 2.840 | 0.101 | 0.042 | 1.046 |
+| regression | drift | window_9 | 9 | 12 | 512.422 | 2.864 | 0.074 | 0.040 | replan_mean | 504.612 | 3.230 | 0.082 | 0.042 | -1.524 |
+| regression | drift | all_ones | 20 | 1 | 583.024 | 3.852 | 0.070 | 0.050 | replan_last | 591.845 | 4.019 | 0.060 | 0.047 | 1.513 |
+| regression | nodrift | window_1 | 1 | 20 | 135.061 | 0.489 | 0.166 | 0.016 | replan_last | 135.061 | 0.489 | 0.166 | 0.016 | 0.000 |
+| regression | nodrift | window_3 | 3 | 18 | 234.516 | 1.227 | 0.151 | 0.027 | replan_mean | 239.660 | 1.321 | 0.148 | 0.027 | 2.193 |
+| regression | nodrift | window_5 | 5 | 16 | 312.612 | 1.834 | 0.112 | 0.032 | replan_mean | 308.668 | 1.970 | 0.120 | 0.033 | -1.262 |
+| regression | nodrift | window_7 | 7 | 14 | 344.732 | 1.990 | 0.132 | 0.042 | replan_mean | 356.210 | 2.831 | 0.136 | 0.041 | 3.329 |
+| regression | nodrift | window_9 | 9 | 12 | 396.465 | 2.892 | 0.130 | 0.047 | replan_mean | 393.953 | 3.704 | 0.109 | 0.042 | -0.634 |
+| regression | nodrift | all_ones | 20 | 1 | 491.462 | 4.211 | 0.180 | 0.076 | replan_last | 508.339 | 4.614 | 0.170 | 0.074 | 3.434 |

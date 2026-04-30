@@ -25,16 +25,14 @@ def main() -> None:
     conditions = sorted({r["condition"] for r in rows})
     ks = sorted({int(r["K"]) for r in rows})
     methods = sorted({r["method"] for r in rows})
-    deployable = [m for m in methods if m != "oracle"]
-    replan = [m for m in deployable if m.startswith("replan_")]
+    replan = [m for m in methods if m.startswith("replan_")]
 
     lines = [
         "# Experiment Efficiency Summary",
         "",
         "Ranking criterion: smaller downstream set size/width `S_mean`. Forecast-error metrics are diagnostic only.",
-        "The `oracle` method uses realized future costs and is not deployable.",
         "",
-        "## Best Deployable Method by Setting",
+        "## Best Method by Setting",
         "",
         "| Task | Condition | K | Best method | S | W | Best replan forecast | Replan S | Replan W |",
         "|---|---|---:|---|---:|---:|---|---:|---:|",
@@ -47,7 +45,7 @@ def main() -> None:
                     r for r in rows
                     if r["task"] == task and r["condition"] == condition and int(r["K"]) == K
                 ]
-                dep = [r for r in subset if r["method"] in deployable]
+                dep = [r for r in subset if r["method"] in methods]
                 rep = [r for r in subset if r["method"] in replan]
                 if not dep:
                     continue
